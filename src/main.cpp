@@ -3,6 +3,7 @@
 #include <LV_Helper.h>
 #include <bosch/BoschSensorDataHelper.hpp>
 #include "esp_wifi.h"
+#include "esp_system.h"
 #include <time.h>
 #include <math.h>
 #include "gps_screen.h"
@@ -1644,6 +1645,46 @@ void setup()
     timezone_init();
 }
 
+static void handle_back_button_short_press()
+{
+    if (settings_screen_is_active()) {
+        clock_screen_show();
+    } else if (nfc_write_screen_is_active()) {
+        nfc_screen_show();
+    } else if (nfc_screen_is_active()) {
+        bluetooth_screen_show();
+    } else if (bluetooth_screen_is_active()) {
+        wifi_radio_screen_show();
+    } else if (wifi_radio_screen_is_active()) {
+        lora_screen_show();
+    } else if (lora_screen_is_active()) {
+        gps_screen_show();
+    } else if (configuration_screen_is_active()) {
+        configuration_screen_commit();
+        if (map_screen_available()) map_screen_show();
+        else                        send_message_screen_show();
+    } else if (map_screen_is_active()) {
+        send_message_screen_show();
+    } else if (send_message_screen_is_active()) {
+        nodes_screen_show();
+    } else if (nodes_screen_is_active()) {
+        meshtastic_screen_show();
+    } else if (meshtastic_screen_is_active()) {
+        clock_screen_show();
+    } else if (analyze_screen_is_active()
+            || bt_analyze_screen_is_active()
+            || lora_analyze_screen_is_active()) {
+        analyze_screen_stop();
+        bt_analyze_screen_stop();
+        lora_analyze_screen_stop();
+        tools_screen_show();
+    } else if (lv_screen_active() == clock_screen) {
+        settings_screen_show();
+    } else {
+        clock_screen_show();
+    }
+}
+
 void loop()
 {
     instance.loop(); // required for power button and PMU event dispatch
@@ -1653,64 +1694,32 @@ void loop()
     // only crosses into the heavy capture+SD-write path on the 3 s edge.
     screenshot_poll();
 
-    // Back button (GPIO0) — consumed here, outside ISR context.
-    // 250 ms debounce: mechanical bounce on GPIO0 can fire several FALLING
-    // edges per press, which would skip multiple screens in one tap.
+    // GPIO0 short press navigates; a 2.5 s hold reboots on release so GPIO0
+    // is high when reset is asserted and the ROM downloader is not selected.
     static uint32_t last_back_ms = 0;
+    static uint32_t back_press_started_ms = 0;
+    static bool back_press_active = false;
+    static bool back_reboot_on_release = false;
     if (back_btn_pressed) {
         back_btn_pressed = false;
         uint32_t now = millis();
-        if (now - last_back_ms < 250) {
-            // ignore bounce
-        } else {
+        if (!back_press_active && now - last_back_ms >= 250) {
             last_back_ms = now;
+            back_press_started_ms = now;
+            back_press_active = true;
+            back_reboot_on_release = false;
             dim_reset_activity();
             if (clock_vibrate) instance.vibrator();
-            if (settings_screen_is_active()) {
-                clock_screen_show();
-            } else if (nfc_write_screen_is_active()) {
-                nfc_screen_show();
-            } else if (nfc_screen_is_active()) {
-                bluetooth_screen_show();
-            } else if (bluetooth_screen_is_active()) {
-                wifi_radio_screen_show();
-            } else if (wifi_radio_screen_is_active()) {
-                lora_screen_show();
-            } else if (lora_screen_is_active()) {
-                gps_screen_show();
-            } else if (configuration_screen_is_active()) {
-                // BOOT mirrors swipe-LEFT: commit edits then step back
-                // through the chain Config -> Map (if tiles present)
-                // -> Send Message.
-                configuration_screen_commit();
-                if (map_screen_available()) map_screen_show();
-                else                        send_message_screen_show();
-            } else if (map_screen_is_active()) {
-                send_message_screen_show();
-            } else if (send_message_screen_is_active()) {
-                nodes_screen_show();
-            } else if (nodes_screen_is_active()) {
-                meshtastic_screen_show();
-            } else if (meshtastic_screen_is_active()) {
-                clock_screen_show();
-            } else if (analyze_screen_is_active()
-                    || bt_analyze_screen_is_active()
-                    || lora_analyze_screen_is_active()) {
-                // Each *_stop() is a no-op when its analyzer isn't running,
-                // so calling all three keeps the boot-button exit path the
-                // same regardless of which one the user is currently on.
-                // Without this, leaving via the back button would leave
-                // WiFi promiscuous channel-hopping, BLE still scanning, or
-                // pager/TPMS/APRS silently dropped — never re-armed.
-                analyze_screen_stop();
-                bt_analyze_screen_stop();
-                lora_analyze_screen_stop();
-                tools_screen_show();
-            } else if (lv_screen_active() == clock_screen) {
-                settings_screen_show();
-            } else {
-                clock_screen_show();
-            }
+        }
+    }
+    if (back_press_active) {
+        if (digitalRead(0) == LOW) {
+            if (millis() - back_press_started_ms >= 2500)
+                back_reboot_on_release = true;
+        } else {
+            back_press_active = false;
+            if (back_reboot_on_release) esp_restart();
+            else handle_back_button_short_press();
         }
     }
 

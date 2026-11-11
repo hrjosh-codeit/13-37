@@ -110,6 +110,7 @@ These are the per-radio status screens stepped through by short-pressing the pow
   - From **Settings**, boot returns to **Clock** (same as power button).
   - From the clock screen, boot opens **Settings**.
   - Holding the boot button while leaving any of the three analyze screens explicitly **tears down the analyzer and restores the prior radio consumer** (see Analyze, below).
+  - Hold BOOT for 2.5 seconds and release to reboot the firmware.
 
 ### NFC
 
@@ -333,7 +334,7 @@ This matters for content placement, not for code correctness: drawing routines, 
 | Control | Function |
 |---------|----------|
 | PWR button | Hold 1 s to power on; hold 6 s to power off; short press = PMU event |
-| BOOT button (GPIO 0) | Custom firmware use or bootloader access |
+| BOOT button (GPIO 0) | Short press = back/navigation; hold 2.5 s and release = reboot; hold during power-on = bootloader access |
 | Reset button | Hardware reset only |
 
 ---
