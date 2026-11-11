@@ -151,6 +151,19 @@ These are the per-radio status screens stepped through by short-pressing the pow
 - **Evil-twin detection** — running passively inside the wardriver. The detector watches WiFi beacons and flags **same-SSID / different-auth** conflicts: when one BSSID has been broadcasting an SSID under (e.g.) `[WPA2-PSK-CCMP][ESS]` and a second BSSID appears with the same SSID under a different mode like `[ESS]` (open), that's the classic impostor-AP pattern used for credential harvesting and DNS interception. Mesh extenders and enterprise rollouts (same SSID, same auth, many BSSIDs) are explicitly **not** flagged, so the noise floor stays low. Each conflict is written to `/EvilTwin/discovered.txt` on SD with the RTC timestamp, the SSID, both BSSIDs and their auth strings (legit + rogue), RSSI, channel, and the current GPS fix when one is available. Per-(SSID, rogue-BSSID) hits are dedup'd for 5 minutes so a single rogue radiating continuously doesn't fill the log. While the count is greater than zero, an orange "ET N" badge appears in the home-screen scan-indicator row between the Flock warning and the AirTag indicator.
 - **Flock Detector** — flags nearby surveillance hardware (Flock Safety, Axon, Ring) by matching BLE/WiFi MAC OUIs; runs alongside the scanners and shows a count on the watch face.
 
+### Personal Tools & Games
+
+These apps are available as tiles in the **Tools** grid:
+
+- **Calculator** — basic addition, subtraction, multiplication, and division, with decimal input, sign toggle, clear, and error handling for division by zero.
+- **Text Editor** — write and save notes on the on-screen keyboard. The default note is `/Notes/note.txt`; text files opened from the file explorer can also be edited. The editor supports up to 2,047 characters.
+- **File Explorer** — browse folders on the microSD card and open `.txt`, `.md`, `.log`, and `.csv` files in the editor. The list shows up to 40 entries per folder. SD access is unavailable while the card is exposed over USB Mass Storage.
+- **Snake** — guide the snake around a 12×12 board with the on-screen direction buttons, eat food to grow, and avoid the walls and snake body.
+- **Tetris** — move, rotate, soft-drop, or hard-drop falling pieces using the on-screen controls. Completed rows are cleared and add to the score.
+- **Pac-Man** — collect pellets in the maze using the direction buttons while avoiding the pursuing ghost; power pellets award extra points.
+
+The editor and file explorer require a ready microSD card to load or save files. When SD access is unavailable, the editor can still hold a temporary draft, but it cannot be saved.
+
 ### Screenshot
 
 - **Screenshot long press** — opt-in via the toggle in **Settings**. While on, holding any point on any screen for **≥ 3 seconds** captures the active screen and writes it to `/Screenshots/YYYYMMDD-HHMMSS.bmp` on the SD card. A short haptic blip confirms the capture. The toggle is automatically greyed out and forced off whenever the SD card isn't writable (no card mounted, or USB-SD has the card claimed) — the moment the card comes back the toggle re-enables itself (the user's saved on/off preference isn't overwritten during the unavailable window). The file is a 16-bit BMP with `BI_BITFIELDS` masks for RGB565, so the pixels are written directly from `lv_snapshot_take()` with no per-pixel conversion — capture latency is ~100–300 ms depending on SD speed.
