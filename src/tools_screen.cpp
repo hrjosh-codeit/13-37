@@ -155,6 +155,17 @@ static lv_obj_t *make_tile(lv_obj_t *parent, const char *label_text)
     return tile;
 }
 
+static void draw_utility_icon(lv_obj_t *tile, const char *glyph,
+                              lv_color_t icon_color, const lv_font_t *font)
+{
+    lv_obj_t *icon = lv_label_create(tile);
+    lv_label_set_text(icon, glyph);
+    lv_obj_set_style_text_color(icon, icon_color, LV_PART_MAIN);
+    lv_obj_set_style_text_font(icon, font, LV_PART_MAIN);
+    lv_obj_set_style_text_align(icon, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+    lv_obj_align(icon, LV_ALIGN_TOP_MID, 0, 40);
+}
+
 // Upper-left: WiFi — signal glyph in cyan, for the site-survey / ping-sweep tool
 static void draw_wifi_icon(lv_obj_t *tile)
 {
@@ -950,6 +961,12 @@ void tools_screen_create()
     draw_skimmer_icon(t_skimmer);
     draw_eviltwin_icon(t_eviltwin);
     draw_flock_icon(t_flock);
+    draw_utility_icon(t_calculator, "123", lv_color_make(0x55, 0xDD, 0xAA), &lv_font_montserrat_32);
+    draw_utility_icon(t_editor, "TXT", lv_color_make(0xFF, 0xCC, 0x66), &lv_font_montserrat_28);
+    draw_utility_icon(t_files, "F", lv_color_make(0x66, 0xBB, 0xFF), &lv_font_montserrat_48);
+    draw_utility_icon(t_snake, "~o", lv_color_make(0x55, 0xDD, 0x88), &lv_font_montserrat_40);
+    draw_utility_icon(t_tetris, "T", lv_color_make(0xFF, 0xAA, 0x55), &lv_font_montserrat_48);
+    draw_utility_icon(t_pacman, "C", lv_color_make(0xFF, 0xEE, 0x55), &lv_font_montserrat_48);
 
     // Tesla CP tile opens the 315 MHz charge-port-open transmit screen.
     lv_obj_add_event_cb(t_tesla, [](lv_event_t *) { tesla_cp_screen_show(); }, LV_EVENT_CLICKED, NULL);

@@ -37,6 +37,7 @@ static lv_obj_t *s_snake_status;
 static int s_snake_x[144], s_snake_y[144], s_snake_length;
 static int s_snake_food_x, s_snake_food_y, s_snake_dx, s_snake_dy;
 static bool s_snake_running;
+static lv_coord_t s_snake_origin_x;
 
 static lv_obj_t *s_tetris_screen;
 static lv_obj_t *s_tetris_cells[12][10];
@@ -44,6 +45,7 @@ static lv_obj_t *s_tetris_status;
 static uint8_t s_tetris_board[12][10];
 static int s_tetris_piece, s_tetris_rotation, s_tetris_x, s_tetris_y, s_tetris_score;
 static bool s_tetris_running;
+static lv_coord_t s_tetris_origin_x;
 
 static lv_obj_t *s_pacman_screen;
 static lv_obj_t *s_pacman_cells[15][15];
@@ -54,6 +56,7 @@ static bool s_pacman_pellets[15][15];
 static int s_pacman_x, s_pacman_y, s_pacman_ghost_x, s_pacman_ghost_y;
 static int s_pacman_dx, s_pacman_dy, s_pacman_score;
 static bool s_pacman_running;
+static lv_coord_t s_pacman_origin_x;
 
 static lv_timer_t *s_snake_timer;
 static lv_timer_t *s_tetris_timer;
@@ -343,16 +346,18 @@ static void snake_tick(lv_timer_t *)
     snake_draw();
 }
 
-static void on_snake_control(lv_event_t *event)
+static void on_snake_gesture(lv_event_t *event)
 {
-    const char *direction = (const char *)lv_event_get_user_data(event);
-    int dx = s_snake_dx, dy = s_snake_dy;
-    if (!strcmp(direction, "U")) { dx = 0; dy = -1; }
-    else if (!strcmp(direction, "D")) { dx = 0; dy = 1; }
-    else if (!strcmp(direction, "L")) { dx = -1; dy = 0; }
-    else if (!strcmp(direction, "R")) { dx = 1; dy = 0; }
     if (!s_snake_running) return;
-    if (dx != -s_snake_dx || dy != -s_snake_dy) { s_snake_dx = dx; s_snake_dy = dy; }
+    lv_indev_t *indev = lv_event_get_indev(event);
+    if (!indev) return;
+    lv_dir_t direction = lv_indev_get_gesture_dir(indev);
+    int dx = direction == LV_DIR_LEFT ? -1 : direction == LV_DIR_RIGHT ? 1 : 0;
+    int dy = direction == LV_DIR_TOP ? -1 : direction == LV_DIR_BOTTOM ? 1 : 0;
+    if ((dx || dy) && (dx != -s_snake_dx || dy != -s_snake_dy)) {
+        s_snake_dx = dx;
+        s_snake_dy = dy;
+    }
 }
 
 static bool tetris_collides(int piece, int rotation, int px, int py)
@@ -442,19 +447,17 @@ static void tetris_tick(lv_timer_t *)
     tetris_draw();
 }
 
-static void on_tetris_control(lv_event_t *event)
+static void on_tetris_gesture(lv_event_t *event)
 {
-    const char *command = (const char *)lv_event_get_user_data(event);
     if (!s_tetris_running) return;
-    if (!strcmp(command, "L") && !tetris_collides(s_tetris_piece, s_tetris_rotation, s_tetris_x - 1, s_tetris_y)) s_tetris_x--;
-    else if (!strcmp(command, "R") && !tetris_collides(s_tetris_piece, s_tetris_rotation, s_tetris_x + 1, s_tetris_y)) s_tetris_x++;
-    else if (!strcmp(command, "T") && !tetris_collides(s_tetris_piece, (s_tetris_rotation + 1) % 4, s_tetris_x, s_tetris_y)) s_tetris_rotation = (s_tetris_rotation + 1) % 4;
-    else if (!strcmp(command, "D")) {
+    lv_indev_t *indev = lv_event_get_indev(event);
+    if (!indev) return;
+    lv_dir_t direction = lv_indev_get_gesture_dir(indev);
+    if (direction == LV_DIR_LEFT && !tetris_collides(s_tetris_piece, s_tetris_rotation, s_tetris_x - 1, s_tetris_y)) s_tetris_x--;
+    else if (direction == LV_DIR_RIGHT && !tetris_collides(s_tetris_piece, s_tetris_rotation, s_tetris_x + 1, s_tetris_y)) s_tetris_x++;
+    else if (direction == LV_DIR_TOP && !tetris_collides(s_tetris_piece, (s_tetris_rotation + 1) % 4, s_tetris_x, s_tetris_y)) s_tetris_rotation = (s_tetris_rotation + 1) % 4;
+    else if (direction == LV_DIR_BOTTOM) {
         if (!tetris_collides(s_tetris_piece, s_tetris_rotation, s_tetris_x, s_tetris_y + 1)) s_tetris_y++;
-        else tetris_lock();
-    } else if (!strcmp(command, "DROP")) {
-        while (!tetris_collides(s_tetris_piece, s_tetris_rotation, s_tetris_x, s_tetris_y + 1)) s_tetris_y++;
-        tetris_lock();
     }
     tetris_draw();
 }
@@ -475,8 +478,31 @@ static void pacman_draw()
         lv_label_set_text(s_pacman_cells[y][x], s_pacman_pellets[y][x] ? (s_pacman_maze[y][x] == 'o' ? "o" : ".") : "");
         lv_obj_set_style_text_color(s_pacman_cells[y][x], lv_color_make(0xFF, 0xDD, 0x55), LV_PART_MAIN);
     }
-    lv_obj_set_pos(s_pacman_player, 107 + s_pacman_x * 16, 92 + s_pacman_y * 16);
-    lv_obj_set_pos(s_pacman_ghost, 107 + s_pacman_ghost_x * 16, 92 + s_pacman_ghost_y * 16);
+    lv_obj_set_pos(s_pacman_player, s_pacman_origin_x + s_pacman_x * 19, 92 + s_pacman_y * 19);
+    lv_obj_set_pos(s_pacman_ghost, s_pacman_origin_x + s_pacman_ghost_x * 19, 92 + s_pacman_ghost_y * 19);
+}
+
+static bool pacman_cell_open(int x, int y)
+{
+    return x >= 0 && x < 15 && y >= 0 && y < 15 && s_pacman_maze[y][x] != '#';
+}
+
+static void pacman_move_ghost()
+{
+    int dx = (s_pacman_x > s_pacman_ghost_x) - (s_pacman_x < s_pacman_ghost_x);
+    int dy = (s_pacman_y > s_pacman_ghost_y) - (s_pacman_y < s_pacman_ghost_y);
+    bool horizontal_first = abs(s_pacman_x - s_pacman_ghost_x) >=
+                            abs(s_pacman_y - s_pacman_ghost_y);
+    for (int attempt = 0; attempt < 2; attempt++) {
+        bool horizontal = (attempt == 0) == horizontal_first;
+        int next_x = s_pacman_ghost_x + (horizontal ? dx : 0);
+        int next_y = s_pacman_ghost_y + (horizontal ? 0 : dy);
+        if ((horizontal ? dx : dy) != 0 && pacman_cell_open(next_x, next_y)) {
+            s_pacman_ghost_x = next_x;
+            s_pacman_ghost_y = next_y;
+            return;
+        }
+    }
 }
 
 static void pacman_tick(lv_timer_t *)
@@ -487,30 +513,31 @@ static void pacman_tick(lv_timer_t *)
         s_pacman_x = nx; s_pacman_y = ny;
         if (s_pacman_pellets[ny][nx]) { s_pacman_pellets[ny][nx] = false; s_pacman_score += s_pacman_maze[ny][nx] == 'o' ? 50 : 10; }
     }
-    int gx = s_pacman_ghost_x, gy = s_pacman_ghost_y;
-    if (abs(s_pacman_x - gx) > abs(s_pacman_y - gy)) gx += s_pacman_x > gx ? 1 : -1;
-    else gy += s_pacman_y > gy ? 1 : -1;
-    if (s_pacman_maze[gy][gx] == '#') {
-        gx = s_pacman_ghost_x; gy = s_pacman_ghost_y;
-        if (s_pacman_maze[gy][s_pacman_x] != '#') gx += s_pacman_x > gx ? 1 : -1;
-        else if (s_pacman_maze[s_pacman_y][gx] != '#') gy += s_pacman_y > gy ? 1 : -1;
-    }
-    s_pacman_ghost_x = gx; s_pacman_ghost_y = gy;
-    if (s_pacman_x == gx && s_pacman_y == gy) {
+    pacman_move_ghost();
+    if (s_pacman_x == s_pacman_ghost_x && s_pacman_y == s_pacman_ghost_y) {
         s_pacman_running = false;
         lv_label_set_text_fmt(s_pacman_status, "Caught - score %d", s_pacman_score);
     } else lv_label_set_text_fmt(s_pacman_status, "Score %d", s_pacman_score);
     pacman_draw();
 }
 
-static void on_pacman_control(lv_event_t *event)
+static void on_pacman_gesture(lv_event_t *event)
 {
-    const char *direction = (const char *)lv_event_get_user_data(event);
     if (!s_pacman_running) return;
-    if (!strcmp(direction, "U")) { s_pacman_dx = 0; s_pacman_dy = -1; }
-    else if (!strcmp(direction, "D")) { s_pacman_dx = 0; s_pacman_dy = 1; }
-    else if (!strcmp(direction, "L")) { s_pacman_dx = -1; s_pacman_dy = 0; }
-    else if (!strcmp(direction, "R")) { s_pacman_dx = 1; s_pacman_dy = 0; }
+    lv_indev_t *indev = lv_event_get_indev(event);
+    if (!indev) return;
+    lv_dir_t direction = lv_indev_get_gesture_dir(indev);
+    s_pacman_dx = direction == LV_DIR_LEFT ? -1 : direction == LV_DIR_RIGHT ? 1 : 0;
+    s_pacman_dy = direction == LV_DIR_TOP ? -1 : direction == LV_DIR_BOTTOM ? 1 : 0;
+}
+
+static void add_swipe_hint(lv_obj_t *screen, const char *text)
+{
+    lv_obj_t *hint = lv_label_create(screen);
+    lv_label_set_text(hint, text);
+    lv_obj_set_style_text_color(hint, lv_color_make(0x77, 0x77, 0x77), LV_PART_MAIN);
+    lv_obj_set_style_text_font(hint, &lv_font_montserrat_14, LV_PART_MAIN);
+    lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -18);
 }
 
 void utility_apps_create()
@@ -581,55 +608,54 @@ void utility_apps_create()
     s_snake_status = lv_label_create(s_snake_screen);
     lv_obj_set_style_text_color(s_snake_status, lv_color_make(0x00, 0xDD, 0x88), LV_PART_MAIN);
     lv_obj_set_style_text_font(s_snake_status, &lv_font_montserrat_16, LV_PART_MAIN);
-    lv_obj_set_pos(s_snake_status, 210, 62);
+    lv_obj_align(s_snake_status, LV_ALIGN_TOP_MID, 0, 62);
+    s_snake_origin_x = (lv_display_get_horizontal_resolution(lv_display_get_default()) - 288) / 2;
     for (int y = 0; y < 12; y++) for (int x = 0; x < 12; x++) {
         lv_obj_t *cell = lv_obj_create(s_snake_screen);
         s_snake_cells[y][x] = cell;
-        lv_obj_set_size(cell, 20, 20);
-        lv_obj_set_pos(cell, 107 + x * 20, 94 + y * 20);
+        lv_obj_set_size(cell, 24, 24);
+        lv_obj_set_pos(cell, s_snake_origin_x + x * 24, 90 + y * 24);
         lv_obj_set_style_bg_color(cell, lv_color_make(0x08, 0x08, 0x08), LV_PART_MAIN);
         lv_obj_set_style_border_color(cell, lv_color_make(0x22, 0x22, 0x22), LV_PART_MAIN);
         lv_obj_set_style_border_width(cell, 1, LV_PART_MAIN);
         lv_obj_set_style_pad_all(cell, 0, LV_PART_MAIN);
         lv_obj_clear_flag(cell, LV_OBJ_FLAG_SCROLLABLE);
     }
-    make_button(s_snake_screen, "^", 38, 36, 208, 336, on_snake_control, (void *)"U");
-    make_button(s_snake_screen, "<", 30, 36, 182, 376, on_snake_control, (void *)"L");
-    make_button(s_snake_screen, "v", 30, 36, 212, 376, on_snake_control, (void *)"D");
-    make_button(s_snake_screen, ">", 30, 36, 242, 376, on_snake_control, (void *)"R");
+    add_swipe_hint(s_snake_screen, "Swipe to steer");
+    lv_obj_add_event_cb(s_snake_screen, on_snake_gesture, LV_EVENT_GESTURE, nullptr);
     s_snake_timer = lv_timer_create(snake_tick, 360, nullptr);
 
     s_tetris_screen = new_screen("TETRIS");
     s_tetris_status = lv_label_create(s_tetris_screen);
     lv_obj_set_style_text_color(s_tetris_status, lv_color_make(0xFF, 0xCC, 0x33), LV_PART_MAIN);
     lv_obj_set_style_text_font(s_tetris_status, &lv_font_montserrat_16, LV_PART_MAIN);
-    lv_obj_set_pos(s_tetris_status, 210, 62);
+    lv_obj_align(s_tetris_status, LV_ALIGN_TOP_MID, 0, 62);
+    s_tetris_origin_x = (lv_display_get_horizontal_resolution(lv_display_get_default()) - 240) / 2;
     for (int y = 0; y < 12; y++) for (int x = 0; x < 10; x++) {
         lv_obj_t *cell = lv_obj_create(s_tetris_screen);
         s_tetris_cells[y][x] = cell;
-        lv_obj_set_size(cell, 18, 18);
-        lv_obj_set_pos(cell, 137 + x * 18, 94 + y * 18);
+        lv_obj_set_size(cell, 24, 24);
+        lv_obj_set_pos(cell, s_tetris_origin_x + x * 24, 90 + y * 24);
         lv_obj_set_style_bg_color(cell, lv_color_black(), LV_PART_MAIN);
         lv_obj_set_style_border_color(cell, lv_color_make(0x33, 0x33, 0x33), LV_PART_MAIN);
         lv_obj_set_style_border_width(cell, 1, LV_PART_MAIN);
         lv_obj_clear_flag(cell, LV_OBJ_FLAG_SCROLLABLE);
     }
-    make_button(s_tetris_screen, "<", 48, 40, 121, 332, on_tetris_control, (void *)"L");
-    make_button(s_tetris_screen, ">", 48, 40, 175, 332, on_tetris_control, (void *)"R");
-    make_button(s_tetris_screen, "ROT", 48, 40, 229, 332, on_tetris_control, (void *)"T");
-    make_button(s_tetris_screen, "DROP", 56, 40, 283, 332, on_tetris_control, (void *)"DROP");
+    add_swipe_hint(s_tetris_screen, "Swipe sideways to move, up to rotate, down to drop");
+    lv_obj_add_event_cb(s_tetris_screen, on_tetris_gesture, LV_EVENT_GESTURE, nullptr);
     s_tetris_timer = lv_timer_create(tetris_tick, 520, nullptr);
 
     s_pacman_screen = new_screen("PAC-MAN");
     s_pacman_status = lv_label_create(s_pacman_screen);
     lv_obj_set_style_text_color(s_pacman_status, lv_color_make(0xFF, 0xDD, 0x55), LV_PART_MAIN);
     lv_obj_set_style_text_font(s_pacman_status, &lv_font_montserrat_16, LV_PART_MAIN);
-    lv_obj_set_pos(s_pacman_status, 210, 62);
+    lv_obj_align(s_pacman_status, LV_ALIGN_TOP_MID, 0, 62);
+    s_pacman_origin_x = (lv_display_get_horizontal_resolution(lv_display_get_default()) - 285) / 2;
     for (int y = 0; y < 15; y++) for (int x = 0; x < 15; x++) {
-        lv_obj_t *cell = lv_obj_create(s_pacman_screen);
+        lv_obj_t *cell = lv_label_create(s_pacman_screen);
         s_pacman_cells[y][x] = cell;
-        lv_obj_set_size(cell, 16, 16);
-        lv_obj_set_pos(cell, 107 + x * 16, 92 + y * 16);
+        lv_obj_set_size(cell, 19, 19);
+        lv_obj_set_pos(cell, s_pacman_origin_x + x * 19, 92 + y * 19);
         lv_obj_set_style_bg_color(cell, lv_color_black(), LV_PART_MAIN);
         lv_obj_set_style_border_width(cell, 0, LV_PART_MAIN);
         lv_obj_set_style_text_font(cell, &lv_font_montserrat_14, LV_PART_MAIN);
@@ -646,11 +672,9 @@ void utility_apps_create()
     lv_label_set_text(s_pacman_ghost, "G");
     lv_obj_set_style_text_color(s_pacman_ghost, lv_color_make(0xFF, 0x55, 0xAA), LV_PART_MAIN);
     lv_obj_set_style_text_font(s_pacman_ghost, &lv_font_montserrat_20, LV_PART_MAIN);
-    make_button(s_pacman_screen, "^", 42, 34, 206, 336, on_pacman_control, (void *)"U");
-    make_button(s_pacman_screen, "<", 36, 34, 176, 372, on_pacman_control, (void *)"L");
-    make_button(s_pacman_screen, "v", 36, 34, 212, 372, on_pacman_control, (void *)"D");
-    make_button(s_pacman_screen, ">", 36, 34, 248, 372, on_pacman_control, (void *)"R");
-    s_pacman_timer = lv_timer_create(pacman_tick, 240, nullptr);
+    add_swipe_hint(s_pacman_screen, "Swipe to move");
+    lv_obj_add_event_cb(s_pacman_screen, on_pacman_gesture, LV_EVENT_GESTURE, nullptr);
+    s_pacman_timer = lv_timer_create(pacman_tick, 420, nullptr);
 }
 
 void calculator_screen_show()

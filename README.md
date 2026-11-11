@@ -158,9 +158,9 @@ These apps are available as tiles in the **Tools** grid:
 - **Calculator** — basic addition, subtraction, multiplication, and division, with decimal input, sign toggle, clear, and error handling for division by zero.
 - **Text Editor** — write and save notes on the on-screen keyboard. The default note is `/Notes/note.txt`; text files opened from the file explorer can also be edited. The editor supports up to 2,047 characters.
 - **File Explorer** — browse folders on the microSD card and open `.txt`, `.md`, `.log`, and `.csv` files in the editor. The list shows up to 40 entries per folder. SD access is unavailable while the card is exposed over USB Mass Storage.
-- **Snake** — guide the snake around a 12×12 board with the on-screen direction buttons, eat food to grow, and avoid the walls and snake body.
-- **Tetris** — move, rotate, soft-drop, or hard-drop falling pieces using the on-screen controls. Completed rows are cleared and add to the score.
-- **Pac-Man** — collect pellets in the maze using the direction buttons while avoiding the pursuing ghost; power pellets award extra points.
+- **Snake** — swipe in a direction to guide the snake around the enlarged 12×12 board, eat food to grow, and avoid the walls and snake body.
+- **Tetris** — swipe left or right to move pieces, up to rotate, and down to soft-drop on the enlarged board. Completed rows add to the score.
+- **Pac-Man** — swipe to turn through the enlarged maze, collect pellets, and avoid the pursuing ghost; power pellets award extra points.
 
 The editor and file explorer require a ready microSD card to load or save files. When SD access is unavailable, the editor can still hold a temporary draft, but it cannot be saved.
 
