@@ -262,17 +262,6 @@ static void draw_tetris_icon(lv_obj_t *tile)
     make_utility_icon_shape(tile, 24, 24, 102, 49, gold, edge, 4);
 }
 
-static void draw_pacman_icon(lv_obj_t *tile)
-{
-    lv_color_t yellow = lv_color_make(0xFF, 0xE3, 0x45);
-    make_utility_icon_shape(tile, 68, 68, 56, 37, yellow,
-                            lv_color_make(0xD9, 0xA9, 0x21), LV_RADIUS_CIRCLE);
-    make_utility_icon_symbol(tile, LV_SYMBOL_PLAY, lv_color_make(0x11, 0x11, 0x11),
-                             &lv_font_montserrat_24, 28, 30, 94, 56);
-    make_utility_icon_shape(tile, 8, 8, 39, 68, yellow, yellow, LV_RADIUS_CIRCLE);
-    make_utility_icon_shape(tile, 5, 5, 27, 70, yellow, yellow, LV_RADIUS_CIRCLE);
-}
-
 // Upper-left: WiFi — signal glyph in cyan, for the site-survey / ping-sweep tool
 static void draw_wifi_icon(lv_obj_t *tile)
 {
@@ -1053,7 +1042,6 @@ void tools_screen_create()
     lv_obj_t *t_files      = make_tile(grid, "Files");
     lv_obj_t *t_snake      = make_tile(grid, "Snake");
     lv_obj_t *t_tetris     = make_tile(grid, "Tetris");
-    lv_obj_t *t_pacman     = make_tile(grid, "Pac-Man");
 
     draw_wifi_icon(t_wifi);
     draw_analyzer_icon(t_analyze);
@@ -1073,7 +1061,6 @@ void tools_screen_create()
     draw_files_icon(t_files);
     draw_snake_icon(t_snake);
     draw_tetris_icon(t_tetris);
-    draw_pacman_icon(t_pacman);
 
     // Tesla CP tile opens the 315 MHz charge-port-open transmit screen.
     lv_obj_add_event_cb(t_tesla, [](lv_event_t *) { tesla_cp_screen_show(); }, LV_EVENT_CLICKED, NULL);
@@ -1126,7 +1113,6 @@ void tools_screen_create()
     lv_obj_add_event_cb(t_files, [](lv_event_t *) { file_explorer_screen_show(); }, LV_EVENT_CLICKED, NULL);
     lv_obj_add_event_cb(t_snake, [](lv_event_t *) { snake_screen_show(); }, LV_EVENT_CLICKED, NULL);
     lv_obj_add_event_cb(t_tetris, [](lv_event_t *) { tetris_screen_show(); }, LV_EVENT_CLICKED, NULL);
-    lv_obj_add_event_cb(t_pacman, [](lv_event_t *) { pacman_screen_show(); }, LV_EVENT_CLICKED, NULL);
 
     // lv_obj_create() creates objects with LV_OBJ_FLAG_CLICKABLE set by
     // default, so the icon shapes inside each tile would otherwise swallow

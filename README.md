@@ -161,7 +161,6 @@ These apps are available as tiles in the **Tools** grid:
 - **File Explorer** — browse folders on the microSD card and open `.txt`, `.md`, `.log`, and `.csv` files in the editor. The list shows up to 40 entries per folder. SD access is unavailable while the card is exposed over USB Mass Storage.
 - **Snake** — swipe in a direction to guide the snake around the enlarged 12×12 board, eat food to grow, and avoid the walls and snake body.
 - **Tetris** — swipe left or right to move pieces, up to rotate, and down to soft-drop on the enlarged board. Completed rows add to the score.
-- **Pac-Man** — swipe to turn through the maze, collect pellets, and avoid the pursuing ghost; power pellets award extra points. The game is created only when first opened, uses one custom-drawn board object instead of hundreds of per-cell widgets, redraws only when game state changes, and pauses its timer while off-screen.
 
 The editor and file explorer require a ready microSD card to load or save files. When SD access is unavailable, the editor can still hold a temporary draft, but it cannot be saved.
 
