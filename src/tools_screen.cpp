@@ -946,7 +946,6 @@ void tools_screen_create()
     lv_obj_t *t_files      = make_tile(grid, "Files");
     lv_obj_t *t_snake      = make_tile(grid, "Snake");
     lv_obj_t *t_tetris     = make_tile(grid, "Tetris");
-    lv_obj_t *t_pacman     = make_tile(grid, "Pac-Man");
 
     draw_wifi_icon(t_wifi);
     draw_analyzer_icon(t_analyze);
@@ -966,7 +965,6 @@ void tools_screen_create()
     draw_utility_icon(t_files, "F", lv_color_make(0x66, 0xBB, 0xFF), &lv_font_montserrat_48);
     draw_utility_icon(t_snake, "~o", lv_color_make(0x55, 0xDD, 0x88), &lv_font_montserrat_40);
     draw_utility_icon(t_tetris, "T", lv_color_make(0xFF, 0xAA, 0x55), &lv_font_montserrat_48);
-    draw_utility_icon(t_pacman, "C", lv_color_make(0xFF, 0xEE, 0x55), &lv_font_montserrat_48);
 
     // Tesla CP tile opens the 315 MHz charge-port-open transmit screen.
     lv_obj_add_event_cb(t_tesla, [](lv_event_t *) { tesla_cp_screen_show(); }, LV_EVENT_CLICKED, NULL);
@@ -1019,7 +1017,6 @@ void tools_screen_create()
     lv_obj_add_event_cb(t_files, [](lv_event_t *) { file_explorer_screen_show(); }, LV_EVENT_CLICKED, NULL);
     lv_obj_add_event_cb(t_snake, [](lv_event_t *) { snake_screen_show(); }, LV_EVENT_CLICKED, NULL);
     lv_obj_add_event_cb(t_tetris, [](lv_event_t *) { tetris_screen_show(); }, LV_EVENT_CLICKED, NULL);
-    lv_obj_add_event_cb(t_pacman, [](lv_event_t *) { pacman_screen_show(); }, LV_EVENT_CLICKED, NULL);
 
     // lv_obj_create() creates objects with LV_OBJ_FLAG_CLICKABLE set by
     // default, so the icon shapes inside each tile would otherwise swallow
