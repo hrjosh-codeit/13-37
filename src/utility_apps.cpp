@@ -521,6 +521,42 @@ static void pacman_tick(lv_timer_t *)
     pacman_draw();
 }
 
+static void on_pacman_gesture(lv_event_t *event);
+static void add_swipe_hint(lv_obj_t *screen, const char *text);
+
+static void pacman_screen_create()
+{
+    s_pacman_screen = new_screen("PAC-MAN");
+    s_pacman_status = lv_label_create(s_pacman_screen);
+    lv_obj_set_style_text_color(s_pacman_status, lv_color_make(0xFF, 0xDD, 0x55), LV_PART_MAIN);
+    lv_obj_set_style_text_font(s_pacman_status, &lv_font_montserrat_16, LV_PART_MAIN);
+    lv_obj_align(s_pacman_status, LV_ALIGN_TOP_MID, 0, 62);
+    s_pacman_origin_x = (lv_display_get_horizontal_resolution(lv_display_get_default()) - 285) / 2;
+    for (int y = 0; y < 15; y++) for (int x = 0; x < 15; x++) {
+        lv_obj_t *cell = lv_label_create(s_pacman_screen);
+        s_pacman_cells[y][x] = cell;
+        lv_obj_set_size(cell, 19, 19);
+        lv_obj_set_pos(cell, s_pacman_origin_x + x * 19, 92 + y * 19);
+        lv_obj_set_style_bg_color(cell, lv_color_black(), LV_PART_MAIN);
+        lv_obj_set_style_border_width(cell, 0, LV_PART_MAIN);
+        lv_obj_set_style_text_font(cell, &lv_font_montserrat_14, LV_PART_MAIN);
+        lv_obj_set_style_text_align(cell, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+        lv_obj_set_style_pad_all(cell, 0, LV_PART_MAIN);
+        lv_obj_clear_flag(cell, LV_OBJ_FLAG_SCROLLABLE);
+    }
+    s_pacman_player = lv_label_create(s_pacman_screen);
+    lv_label_set_text(s_pacman_player, "C");
+    lv_obj_set_style_text_color(s_pacman_player, lv_color_make(0xFF, 0xEE, 0x00), LV_PART_MAIN);
+    lv_obj_set_style_text_font(s_pacman_player, &lv_font_montserrat_20, LV_PART_MAIN);
+    s_pacman_ghost = lv_label_create(s_pacman_screen);
+    lv_label_set_text(s_pacman_ghost, "G");
+    lv_obj_set_style_text_color(s_pacman_ghost, lv_color_make(0xFF, 0x55, 0xAA), LV_PART_MAIN);
+    lv_obj_set_style_text_font(s_pacman_ghost, &lv_font_montserrat_20, LV_PART_MAIN);
+    add_swipe_hint(s_pacman_screen, "Swipe to move");
+    lv_obj_add_event_cb(s_pacman_screen, on_pacman_gesture, LV_EVENT_GESTURE, nullptr);
+    s_pacman_timer = lv_timer_create(pacman_tick, 420, nullptr);
+}
+
 static void on_pacman_gesture(lv_event_t *event)
 {
     if (!s_pacman_running) return;
@@ -645,36 +681,6 @@ void utility_apps_create()
     lv_obj_add_event_cb(s_tetris_screen, on_tetris_gesture, LV_EVENT_GESTURE, nullptr);
     s_tetris_timer = lv_timer_create(tetris_tick, 520, nullptr);
 
-    s_pacman_screen = new_screen("PAC-MAN");
-    s_pacman_status = lv_label_create(s_pacman_screen);
-    lv_obj_set_style_text_color(s_pacman_status, lv_color_make(0xFF, 0xDD, 0x55), LV_PART_MAIN);
-    lv_obj_set_style_text_font(s_pacman_status, &lv_font_montserrat_16, LV_PART_MAIN);
-    lv_obj_align(s_pacman_status, LV_ALIGN_TOP_MID, 0, 62);
-    s_pacman_origin_x = (lv_display_get_horizontal_resolution(lv_display_get_default()) - 285) / 2;
-    for (int y = 0; y < 15; y++) for (int x = 0; x < 15; x++) {
-        lv_obj_t *cell = lv_label_create(s_pacman_screen);
-        s_pacman_cells[y][x] = cell;
-        lv_obj_set_size(cell, 19, 19);
-        lv_obj_set_pos(cell, s_pacman_origin_x + x * 19, 92 + y * 19);
-        lv_obj_set_style_bg_color(cell, lv_color_black(), LV_PART_MAIN);
-        lv_obj_set_style_border_width(cell, 0, LV_PART_MAIN);
-        lv_obj_set_style_text_font(cell, &lv_font_montserrat_14, LV_PART_MAIN);
-        lv_obj_set_style_text_align(cell, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
-        lv_obj_set_style_pad_all(cell, 0, LV_PART_MAIN);
-        lv_obj_clear_flag(cell, LV_OBJ_FLAG_SCROLLABLE);
-        s_pacman_pellets[y][x] = s_pacman_maze[y][x] == '.' || s_pacman_maze[y][x] == 'o';
-    }
-    s_pacman_player = lv_label_create(s_pacman_screen);
-    lv_label_set_text(s_pacman_player, "C");
-    lv_obj_set_style_text_color(s_pacman_player, lv_color_make(0xFF, 0xEE, 0x00), LV_PART_MAIN);
-    lv_obj_set_style_text_font(s_pacman_player, &lv_font_montserrat_20, LV_PART_MAIN);
-    s_pacman_ghost = lv_label_create(s_pacman_screen);
-    lv_label_set_text(s_pacman_ghost, "G");
-    lv_obj_set_style_text_color(s_pacman_ghost, lv_color_make(0xFF, 0x55, 0xAA), LV_PART_MAIN);
-    lv_obj_set_style_text_font(s_pacman_ghost, &lv_font_montserrat_20, LV_PART_MAIN);
-    add_swipe_hint(s_pacman_screen, "Swipe to move");
-    lv_obj_add_event_cb(s_pacman_screen, on_pacman_gesture, LV_EVENT_GESTURE, nullptr);
-    s_pacman_timer = lv_timer_create(pacman_tick, 420, nullptr);
 }
 
 void calculator_screen_show()
@@ -717,6 +723,7 @@ void tetris_screen_show()
 
 void pacman_screen_show()
 {
+    if (!s_pacman_screen) pacman_screen_create();
     for (int y = 0; y < 15; y++) for (int x = 0; x < 15; x++)
         s_pacman_pellets[y][x] = s_pacman_maze[y][x] == '.' || s_pacman_maze[y][x] == 'o';
     s_pacman_x = 1; s_pacman_y = 1; s_pacman_ghost_x = 13; s_pacman_ghost_y = 13;

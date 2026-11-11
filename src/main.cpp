@@ -1168,7 +1168,7 @@ static void update_clock()
 // Firmware name + version surfaced in the boot banner so support tickets carry
 // a fixed anchor. Bump FW_VERSION on each cut.
 #define FW_NAME    "13:37"
-#define FW_VERSION "1.0.0"
+#define FW_VERSION "1.0.3"
 
 void setup()
 {
