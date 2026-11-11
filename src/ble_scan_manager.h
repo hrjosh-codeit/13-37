@@ -28,6 +28,9 @@ void ble_scan_remove(ble_scan_cb_t cb);
 // True if at least one consumer is registered.
 bool ble_scan_active();
 
+// Pauses active scanning while preserving registered consumers for resume.
+void ble_scan_manager_set_low_power_mode(bool enabled);
+
 // How many consumers are currently registered. Useful for status UIs
 // that want to surface "N scanners running" instead of just on/off.
 int  ble_scan_consumer_count();

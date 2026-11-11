@@ -10,10 +10,12 @@ static wifi_beacon_cb_t s_consumers[WBM_MAX_CONSUMERS] = {};
 static int              s_count     = 0;
 static lv_timer_t      *s_hop_timer = nullptr;
 static uint8_t          s_hop_ch    = 1;
+static bool             s_low_power_mode = false;
 
 static void parse_and_dispatch(const uint8_t *frame, int len,
                                 int8_t rssi, uint8_t ch)
 {
+    if (s_low_power_mode) return;
     if (len < 38) return;
     if ((frame[0] & 0xFC) != 0x80) return;   // not a beacon
 
@@ -96,17 +98,17 @@ static bool start_wifi()
     return true;
 }
 
-static void stop_wifi()
+static void stop_wifi(bool turn_radio_off = true)
 {
     if (s_hop_timer) { lv_timer_del(s_hop_timer); s_hop_timer = nullptr; }
     esp_wifi_set_promiscuous(false);
     esp_wifi_set_promiscuous_rx_cb(nullptr);
-    WiFi.mode(WIFI_OFF);
+    if (turn_radio_off) WiFi.mode(WIFI_OFF);
 }
 
 bool wifi_beacon_add(wifi_beacon_cb_t cb)
 {
-    if (!cb) return false;
+    if (!cb || s_low_power_mode) return false;
     for (int i = 0; i < WBM_MAX_CONSUMERS; i++)
         if (s_consumers[i] == cb) return true;   // idempotent
 
@@ -133,4 +135,13 @@ void wifi_beacon_remove(wifi_beacon_cb_t cb)
     }
 }
 
-bool wifi_beacon_active() { return s_count > 0; }
+bool wifi_beacon_active() { return s_count > 0 && !s_low_power_mode; }
+
+void wifi_beacon_manager_set_low_power_mode(bool enabled)
+{
+    if (s_low_power_mode == enabled) return;
+    s_low_power_mode = enabled;
+    if (s_count == 0) return;
+    if (enabled) stop_wifi();
+    else start_wifi();
+}

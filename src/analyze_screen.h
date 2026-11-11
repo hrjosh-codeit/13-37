@@ -18,3 +18,4 @@ bool analyze_screen_is_active();
 // returns the radio to its prior state instead of leaving it stuck in
 // promiscuous-channel-hopping mode.
 void analyze_screen_stop();
+void analyze_screen_set_low_power_mode(bool enabled);

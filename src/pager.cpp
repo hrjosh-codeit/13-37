@@ -1,4 +1,5 @@
 #include "pager.h"
+#include "radio_policy.h"
 
 void clock_screen_get_local_time(struct tm *out);
 #include "lora_screen.h"
@@ -503,6 +504,7 @@ static int16_t scanner_retune_to(float freq_mhz)
 
 bool pager_start_scanner(PagerMode mode)
 {
+    if (radio_policy_low_power_mode()) return false;
     if (lora_screen_is_powered() || aprs_is_running()) return false;
 
     s_scan_all          = false;        // pager_start() picks up the new freq

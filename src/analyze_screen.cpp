@@ -1,5 +1,6 @@
 #include "analyze_screen.h"
 #include "bt_analyze_screen.h"
+#include "radio_policy.h"
 #include <LilyGoLib.h>
 #include <WiFi.h>
 #include <esp_wifi.h>
@@ -53,6 +54,7 @@ static int      s_cur_ch     = 1;          // 1-based channel currently tuned
 static uint32_t s_hop_start  = 0;
 static uint32_t s_total_pkts = 0;
 static bool     s_running    = false;
+static bool     s_low_power_mode = false;
 
 // WiFi mode at the moment we entered the analyzer — stop_analysis() restores
 // it so leaving the screen returns the radio to its prior state (typically
@@ -74,6 +76,10 @@ static void promisc_cb(void *buf, wifi_promiscuous_pkt_type_t type)
 static void start_analysis()
 {
     if (s_running) return;
+    if (s_low_power_mode || radio_policy_low_power_mode()) {
+        lv_label_set_text(status_label, "Low Power: scans are blocked");
+        return;
+    }
     // Snapshot the WiFi mode *before* we touch the radio so we can restore it
     // on the way out.
     s_prev_wifi_mode = WiFi.getMode();
@@ -313,4 +319,12 @@ void analyze_screen_stop()
     // is safe to call unconditionally — main.cpp uses that to clean up on
     // back-button exit regardless of which analyzer was open.
     stop_analysis();
+}
+
+void analyze_screen_set_low_power_mode(bool enabled)
+{
+    s_low_power_mode = enabled;
+    if (!enabled) return;
+    stop_analysis();
+    if (status_label) lv_label_set_text(status_label, "Low Power: scans are blocked");
 }

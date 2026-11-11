@@ -1,4 +1,5 @@
 #include "pingsweep.h"
+#include "radio_policy.h"
 
 void clock_screen_get_local_time(struct tm *out);
 #include "hostresolve.h"
@@ -178,6 +179,7 @@ static void write_log()
 
 void pingsweep_start()
 {
+    if (radio_policy_low_power_mode()) return;
     if (s_running) return;
     if (WiFi.status() != WL_CONNECTED) return;
 

@@ -1,4 +1,5 @@
 #include "tpms.h"
+#include "radio_policy.h"
 #include "lora_screen.h"
 #include "aprs.h"
 #include <LilyGoLib.h>
@@ -397,6 +398,7 @@ static void ook_task(void *param)
 
 bool tpms_start(bool freq_433, TpmsFormat fmt)
 {
+    if (radio_policy_low_power_mode()) return false;
     if (s_running) {
         if (s_freq_433 == freq_433 && s_format == fmt) return true;
         tpms_stop();

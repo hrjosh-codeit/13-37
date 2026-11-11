@@ -33,3 +33,6 @@ void wifi_beacon_remove(wifi_beacon_cb_t cb);
 
 // True if at least one consumer is registered.
 bool wifi_beacon_active();
+
+// Pauses channel hopping while preserving registered consumers for resume.
+void wifi_beacon_manager_set_low_power_mode(bool enabled);

@@ -6,17 +6,20 @@
 
 static ble_scan_cb_t s_consumers[BLE_SCAN_MAX_CONSUMERS] = {};
 static int           s_consumer_count = 0;
+static bool          s_low_power_mode = false;
+
+static void set_scan_params();
 
 static void gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param)
 {
     // Re-arm the scan after the controller acknowledges our params. If every
     // consumer left during the brief async window, do nothing.
     if (event == ESP_GAP_BLE_SCAN_PARAM_SET_COMPLETE_EVT) {
-        if (s_consumer_count > 0)
+        if (s_consumer_count > 0 && !s_low_power_mode)
             esp_ble_gap_start_scanning(0);
         return;
     }
-    if (event != ESP_GAP_BLE_SCAN_RESULT_EVT) return;
+    if (s_low_power_mode || event != ESP_GAP_BLE_SCAN_RESULT_EVT) return;
     if (param->scan_rst.search_evt != ESP_GAP_SEARCH_INQ_RES_EVT) return;
 
     // Fan out to every registered consumer. Each one applies its own filter.
@@ -45,6 +48,12 @@ static bool bring_up_controller()
 
     esp_ble_gap_register_callback(gap_cb);
 
+    set_scan_params();
+    return true;
+}
+
+static void set_scan_params()
+{
     esp_ble_scan_params_t scan_params = {
         BLE_SCAN_TYPE_PASSIVE,
         BLE_ADDR_TYPE_PUBLIC,
@@ -56,7 +65,6 @@ static bool bring_up_controller()
     // esp_ble_gap_set_scan_params will trigger SCAN_PARAM_SET_COMPLETE_EVT,
     // which gap_cb above turns into a start_scanning call.
     esp_ble_gap_set_scan_params(&scan_params);
-    return true;
 }
 
 static void tear_down_controller()
@@ -70,7 +78,7 @@ static void tear_down_controller()
 
 bool ble_scan_add(ble_scan_cb_t cb)
 {
-    if (!cb) return false;
+    if (!cb || s_low_power_mode) return false;
 
     // Idempotent: already-registered cbs aren't added twice.
     for (int i = 0; i < s_consumer_count; i++)
@@ -106,7 +114,17 @@ void ble_scan_remove(ble_scan_cb_t cb)
 
 bool ble_scan_active()
 {
-    return s_consumer_count > 0;
+    return s_consumer_count > 0 && !s_low_power_mode;
+}
+
+void ble_scan_manager_set_low_power_mode(bool enabled)
+{
+    if (s_low_power_mode == enabled) return;
+    s_low_power_mode = enabled;
+    if (s_consumer_count == 0) return;
+    if (enabled) esp_ble_gap_stop_scanning();
+    else if (esp_bluedroid_get_status() == ESP_BLUEDROID_STATUS_ENABLED)
+        set_scan_params();
 }
 
 int ble_scan_consumer_count()

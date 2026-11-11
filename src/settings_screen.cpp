@@ -1,4 +1,5 @@
 #include "settings_screen.h"
+#include "radio_policy.h"
 #include "usb_sd.h"
 #include <LilyGoLib.h>
 #include <SD.h>
@@ -58,6 +59,8 @@ static lv_obj_t *screenshot_row;
 static lv_obj_t *screenshot_switch;
 static lv_obj_t *screenshot_val_label;
 static lv_obj_t *screenshot_hint;
+static lv_obj_t *low_power_switch;
+static lv_obj_t *low_power_val_label;
 static lv_obj_t *year_roller;
 static lv_obj_t *month_roller;
 static lv_obj_t *day_roller;
@@ -255,6 +258,14 @@ static void on_screenshot_changed(lv_event_t *)
 {
     bool on = lv_obj_has_state(screenshot_switch, LV_STATE_CHECKED);
     lv_label_set_text(screenshot_val_label, on ? "On" : "Off");
+    settings_save_to_sd();
+}
+
+static void on_low_power_changed(lv_event_t *)
+{
+    bool on = lv_obj_has_state(low_power_switch, LV_STATE_CHECKED);
+    lv_label_set_text(low_power_val_label, on ? "On" : "Off");
+    radio_policy_set_low_power_mode(on);
     settings_save_to_sd();
 }
 
@@ -920,6 +931,45 @@ void settings_screen_create()
     lv_obj_align(screenshot_hint, LV_ALIGN_TOP_MID, 0, 1190);
     register_shiftable(screenshot_hint, 1190);
 
+    lv_obj_t *low_power_row = lv_obj_create(settings_screen);
+    lv_obj_set_size(low_power_row, 380, 40);
+    lv_obj_set_style_bg_opa(low_power_row, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_border_width(low_power_row, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(low_power_row, 0, LV_PART_MAIN);
+    lv_obj_clear_flag(low_power_row, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_align(low_power_row, LV_ALIGN_TOP_MID, 0, 1252);
+    register_shiftable(low_power_row, 1252);
+
+    lv_obj_t *low_power_label = lv_label_create(low_power_row);
+    lv_obj_set_style_text_color(low_power_label, lv_color_make(0xAA, 0xAA, 0xAA), LV_PART_MAIN);
+    lv_obj_set_style_text_font(low_power_label, &lv_font_montserrat_20, LV_PART_MAIN);
+    lv_label_set_text(low_power_label, "Low power: block scans");
+    lv_obj_align(low_power_label, LV_ALIGN_LEFT_MID, 0, 0);
+
+    low_power_val_label = lv_label_create(low_power_row);
+    lv_obj_set_style_text_color(low_power_val_label, lv_color_make(0xAA, 0xAA, 0xAA), LV_PART_MAIN);
+    lv_obj_set_style_text_font(low_power_val_label, &lv_font_montserrat_20, LV_PART_MAIN);
+    lv_label_set_text(low_power_val_label, "Off");
+    lv_obj_align(low_power_val_label, LV_ALIGN_RIGHT_MID, -80, 0);
+
+    low_power_switch = lv_switch_create(low_power_row);
+    lv_obj_set_size(low_power_switch, 70, 34);
+    lv_obj_set_style_bg_color(low_power_switch, lv_color_make(0x44, 0x44, 0x44), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(low_power_switch, lv_color_make(0x00, 0xCC, 0x66), LV_PART_MAIN | LV_STATE_CHECKED);
+    lv_obj_add_event_cb(low_power_switch, on_low_power_changed, LV_EVENT_VALUE_CHANGED, NULL);
+    lv_obj_align(low_power_switch, LV_ALIGN_RIGHT_MID, 0, 0);
+
+    lv_obj_t *low_power_hint = lv_label_create(settings_screen);
+    lv_obj_set_style_text_color(low_power_hint, lv_color_make(0x66, 0x66, 0x66), LV_PART_MAIN);
+    lv_obj_set_style_text_font(low_power_hint, &lv_font_montserrat_14, LV_PART_MAIN);
+    lv_obj_set_style_text_align(low_power_hint, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+    lv_obj_set_width(low_power_hint, 360);
+    lv_label_set_long_mode(low_power_hint, LV_LABEL_LONG_WRAP);
+    lv_label_set_text(low_power_hint,
+        "Pauses Wi-Fi, Bluetooth, pager hopping, TPMS, and network scans.");
+    lv_obj_align(low_power_hint, LV_ALIGN_TOP_MID, 0, 1298);
+    register_shiftable(low_power_hint, 1298);
+
     // Reflect the current SD state in the row's interactability + checked
     // state. Boot order matters here — instance.isCardReady() may flip
     // later, but settings_screen_apply_sd_state() is also called from
@@ -986,6 +1036,7 @@ static void settings_save_to_sd()
     f.printf("motion_wake=%d\n",     lv_obj_has_state(motion_wake_switch, LV_STATE_CHECKED) ? 1 : 0);
     f.printf("manual_time=%d\n",     lv_obj_has_state(manual_time_switch, LV_STATE_CHECKED) ? 1 : 0);
     f.printf("screenshot=%d\n",      lv_obj_has_state(screenshot_switch,  LV_STATE_CHECKED) ? 1 : 0);
+    f.printf("low_power=%d\n",       lv_obj_has_state(low_power_switch,   LV_STATE_CHECKED) ? 1 : 0);
     f.close();
 }
 
@@ -1080,6 +1131,10 @@ void settings_screen_load()
         } else if (key == "screenshot") {
             apply_switch(screenshot_switch, b);
             lv_label_set_text(screenshot_val_label, b ? "On" : "Off");
+        } else if (key == "low_power") {
+            apply_switch(low_power_switch, b);
+            lv_label_set_text(low_power_val_label, b ? "On" : "Off");
+            radio_policy_set_low_power_mode(b);
         }
     }
     // Re-evaluate SD-aware state once loading is done — a persisted

@@ -2,8 +2,10 @@
 #include "pingsweep.h"
 #include "hostresolve.h"
 #include "portscan_screen.h"
+#include "radio_policy.h"
 #include <LilyGoLib.h>
 #include <WiFi.h>
+#include "esp_wifi.h"
 #include <string.h>
 
 // Defined in tools_screen.cpp
@@ -191,7 +193,9 @@ static void update_status()
 
     switch (s_state) {
     case WST_IDLE:
-        txt = "Tap SCAN to survey nearby networks";
+        txt = radio_policy_low_power_mode()
+            ? "Low Power: scans are blocked"
+            : "Tap SCAN to survey nearby networks";
         break;
     case WST_SCANNING:
         txt = "Scanning...";
@@ -364,6 +368,12 @@ static void on_kb_event(lv_event_t *e)
 
 static void start_scan()
 {
+    if (radio_policy_low_power_mode()) {
+        s_state = WST_IDLE;
+        update_status();
+        update_buttons();
+        return;
+    }
     WiFi.mode(WIFI_STA);
     WiFi.scanDelete();
     WiFi.scanNetworks(true);   // async
@@ -372,6 +382,10 @@ static void start_scan()
 
 static void on_btn1(lv_event_t *)
 {
+    if (radio_policy_low_power_mode()) {
+        lv_label_set_text(status_label, "Low Power: scans are blocked");
+        return;
+    }
     if (s_state == WST_CONNECTED) {
         if (!pingsweep_is_running()) {
             pingsweep_start();
@@ -587,4 +601,19 @@ void wifi_screen_show()
 bool wifi_screen_is_active()
 {
     return lv_screen_active() == wifi_screen;
+}
+
+void wifi_screen_set_low_power_mode(bool enabled)
+{
+    if (!enabled) return;
+    if (s_state == WST_SCANNING) {
+        esp_wifi_scan_stop();
+        WiFi.scanDelete();
+        s_state = s_net_count > 0 ? WST_LIST : WST_IDLE;
+    }
+    pingsweep_stop();
+    if (wifi_screen && lv_screen_active() == wifi_screen) {
+        update_status();
+        update_buttons();
+    }
 }

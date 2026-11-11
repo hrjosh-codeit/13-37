@@ -1,4 +1,5 @@
 #include "portscan.h"
+#include "radio_policy.h"
 
 void clock_screen_get_local_time(struct tm *out);
 #include "usb_sd.h"
@@ -322,6 +323,7 @@ static void scan_task(void *)
 bool portscan_start(uint32_t ip_host_order, PortScanTech tech,
                     PortScanPreset preset, uint16_t lo, uint16_t hi)
 {
+    if (radio_policy_low_power_mode()) return false;
     if (s_running) return false;
     if (WiFi.status() != WL_CONNECTED) return false;
     if (ip_host_order == 0) return false;

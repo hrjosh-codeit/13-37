@@ -1,5 +1,6 @@
 #include "nfc_screen.h"
 #include "nfc_write_screen.h"
+#include "radio_policy.h"
 #include <LilyGoLib.h>
 
 static lv_obj_t *nfc_screen;
@@ -13,6 +14,7 @@ static lv_obj_t *data_panel;
 static lv_obj_t *data_label;
 
 static bool nfc_powered = false;
+static bool s_low_power_mode = false;
 
 enum NfcReadState { NFC_IDLE, NFC_DISCOVERING };
 static NfcReadState s_read_state  = NFC_IDLE;
@@ -144,7 +146,11 @@ static void nfc_process_card()
 
 static void set_read_btn_scanning(bool scanning)
 {
-    if (scanning) {
+    if (s_low_power_mode) {
+        lv_obj_set_style_bg_color(read_btn, lv_color_make(0x33, 0x33, 0x33), LV_PART_MAIN);
+        lv_obj_set_style_text_color(read_btn_label, lv_color_make(0x77, 0x77, 0x77), LV_PART_MAIN);
+        lv_label_set_text(read_btn_label, "Blocked");
+    } else if (scanning) {
         lv_obj_set_style_bg_color(read_btn, lv_color_make(0xCC, 0x22, 0x22), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_text_color(read_btn_label, lv_color_white(), LV_PART_MAIN);
         lv_label_set_text(read_btn_label, "Stop");
@@ -192,6 +198,10 @@ static void on_toggle(lv_event_t *e)
 static void on_read_btn(lv_event_t *e)
 {
     if (!nfc_powered) return;
+    if (s_low_power_mode || radio_policy_low_power_mode()) {
+        lv_label_set_text(data_label, "Blocked by Low Power mode");
+        return;
+    }
 
     if (s_read_state == NFC_DISCOVERING) {
         // Stop scanning
@@ -212,6 +222,10 @@ static void on_read_btn(lv_event_t *e)
 static void on_write_btn(lv_event_t *e)
 {
     if (!nfc_powered) return;
+    if (s_low_power_mode || radio_policy_low_power_mode()) {
+        lv_label_set_text(data_label, "Blocked by Low Power mode");
+        return;
+    }
     // Stop any in-progress read scan before handing the reader to the writer
     if (s_read_state == NFC_DISCOVERING) {
         NFCReader.rfalNfcDeactivate(false);
@@ -321,6 +335,21 @@ void nfc_screen_show()
 bool nfc_screen_is_active()
 {
     return lv_screen_active() == nfc_screen;
+}
+
+void nfc_screen_set_low_power_mode(bool enabled)
+{
+    s_low_power_mode = enabled;
+    if (!enabled) {
+        update_ui();
+        return;
+    }
+    if (s_read_state == NFC_DISCOVERING) {
+        NFCReader.rfalNfcDeactivate(false);
+        s_read_state = NFC_IDLE;
+        s_card_ready = false;
+    }
+    if (nfc_screen) update_ui();
 }
 
 void nfc_screen_worker()
