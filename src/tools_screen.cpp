@@ -12,6 +12,7 @@
 #include "aprs_screen.h"
 #include "wifi_screen.h"
 #include "analyze_screen.h"
+#include "utility_apps.h"
 #include <LilyGoLib.h>
 
 // Defined in main.cpp
@@ -929,6 +930,12 @@ void tools_screen_create()
     t_skimmer           = make_tile(grid, "Skimmers");
     t_eviltwin          = make_tile(grid, "Evil Twin");
     t_flock             = make_tile(grid, "Flock");
+    lv_obj_t *t_calculator = make_tile(grid, "Calculator");
+    lv_obj_t *t_editor     = make_tile(grid, "Text Editor");
+    lv_obj_t *t_files      = make_tile(grid, "Files");
+    lv_obj_t *t_snake      = make_tile(grid, "Snake");
+    lv_obj_t *t_tetris     = make_tile(grid, "Tetris");
+    lv_obj_t *t_pacman     = make_tile(grid, "Pac-Man");
 
     draw_wifi_icon(t_wifi);
     draw_analyzer_icon(t_analyze);
@@ -990,6 +997,12 @@ void tools_screen_create()
 
     // Analyze tile opens the WiFi channel utilisation visualisation.
     lv_obj_add_event_cb(t_analyze, [](lv_event_t *) { analyze_screen_show(); }, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(t_calculator, [](lv_event_t *) { calculator_screen_show(); }, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(t_editor, [](lv_event_t *) { text_editor_screen_show(); }, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(t_files, [](lv_event_t *) { file_explorer_screen_show(); }, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(t_snake, [](lv_event_t *) { snake_screen_show(); }, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(t_tetris, [](lv_event_t *) { tetris_screen_show(); }, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(t_pacman, [](lv_event_t *) { pacman_screen_show(); }, LV_EVENT_CLICKED, NULL);
 
     // lv_obj_create() creates objects with LV_OBJ_FLAG_CLICKABLE set by
     // default, so the icon shapes inside each tile would otherwise swallow

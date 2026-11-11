@@ -53,6 +53,7 @@
 #include "flock.h"
 #include "matrix_bg.h"
 #include "nfc_icon.h"
+#include "utility_apps.h"
 
 static lv_obj_t *clock_screen;
 static lv_obj_t *time_label;
@@ -1537,6 +1538,7 @@ void setup()
     configuration_screen_create();
     channels_screen_create();
     settings_screen_create();
+    utility_apps_create();
     tools_screen_create();
     tpms_screen_create();
     pager_screen_create();
