@@ -161,7 +161,7 @@ These apps are available as tiles in the **Tools** grid:
 - **File Explorer** — browse folders on the microSD card and open `.txt`, `.md`, `.log`, and `.csv` files in the editor. The list shows up to 40 entries per folder. SD access is unavailable while the card is exposed over USB Mass Storage.
 - **Snake** — swipe in a direction to guide the snake around the enlarged 12×12 board, eat food to grow, and avoid the walls and snake body.
 - **Tetris** — swipe left or right to move pieces, up to rotate, and down to soft-drop on the enlarged board. Completed rows add to the score.
-- **Pac-Man** — swipe to turn through the enlarged maze, collect pellets, and avoid the pursuing ghost; power pellets award extra points.
+- **Pac-Man** — swipe to turn through the maze, collect pellets, and avoid the pursuing ghost; power pellets award extra points. The game is created only when first opened, uses one custom-drawn board object instead of hundreds of per-cell widgets, redraws only when game state changes, and pauses its timer while off-screen.
 
 The editor and file explorer require a ready microSD card to load or save files. When SD access is unavailable, the editor can still hold a temporary draft, but it cannot be saved.
 
@@ -434,10 +434,10 @@ If the board isn't auto-detected, pass the port: `pio run -t upload --upload-por
 
 **Easiest — flash from your browser** (no toolchain): open **<https://r3dfish.github.io/13-37/>** in desktop **Chrome** or **Edge**, plug the watch in over USB-C, and click **Install**. (Uses [ESP Web Tools](https://esphome.github.io/esp-web-tools/) over WebSerial.)
 
-**Or with esptool** — just [esptool](https://github.com/espressif/esptool) (`pip install esptool`). Download **`1337-v1.0.5.bin`** from the [latest release](https://github.com/r3dfish/13-37/releases/latest) (a single merged image) and flash it at offset `0x0`:
+**Or with esptool** — just [esptool](https://github.com/espressif/esptool) (`pip install esptool`). Download **`1337-v1.0.6.bin`** from the [latest release](https://github.com/r3dfish/13-37/releases/latest) (a single merged image) and flash it at offset `0x0`:
 
 ```bash
-esptool.py --chip esp32s3 --port /dev/ttyACM0 --baud 921600 write_flash 0x0 1337-v1.0.5.bin
+esptool.py --chip esp32s3 --port /dev/ttyACM0 --baud 921600 write_flash 0x0 1337-v1.0.6.bin
 ```
 
 If you instead have the three separate build artifacts, flash them at their offsets (the bootloader sits at `0x0` on the ESP32-S3, and `boot_app0.bin` ships with the Arduino-ESP32 framework):
@@ -455,7 +455,7 @@ esptool.py --chip esp32s3 --port /dev/ttyACM0 --baud 921600 write_flash \
 From `.pio/build/twatch_ultra/` (with `boot_app0.bin` copied from `~/.platformio/packages/framework-arduinoespressif32/tools/partitions/`):
 
 ```bash
-esptool.py --chip esp32s3 merge_bin -o 1337-v1.0.5.bin \
+esptool.py --chip esp32s3 merge_bin -o 1337-v1.0.6.bin \
   --flash_mode qio --flash_freq 80m --flash_size 16MB \
   0x0 bootloader.bin 0x8000 partitions.bin 0xe000 boot_app0.bin 0x10000 firmware.bin
 ```

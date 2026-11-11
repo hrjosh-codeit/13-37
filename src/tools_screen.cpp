@@ -155,15 +155,122 @@ static lv_obj_t *make_tile(lv_obj_t *parent, const char *label_text)
     return tile;
 }
 
-static void draw_utility_icon(lv_obj_t *tile, const char *glyph,
-                              lv_color_t icon_color, const lv_font_t *font)
+static lv_obj_t *make_utility_icon_shape(lv_obj_t *tile, int width, int height,
+                                         int x, int y, lv_color_t fill,
+                                         lv_color_t border, int radius)
+{
+    lv_obj_t *shape = lv_obj_create(tile);
+    lv_obj_set_size(shape, width, height);
+    lv_obj_set_pos(shape, x, y);
+    lv_obj_set_style_bg_color(shape, fill, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(shape, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_border_color(shape, border, LV_PART_MAIN);
+    lv_obj_set_style_border_width(shape, 1, LV_PART_MAIN);
+    lv_obj_set_style_radius(shape, radius, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(shape, 0, LV_PART_MAIN);
+    lv_obj_clear_flag(shape, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(shape, LV_OBJ_FLAG_CLICKABLE);
+    return shape;
+}
+
+static lv_obj_t *make_utility_icon_symbol(lv_obj_t *tile, const char *symbol,
+                                          lv_color_t color, const lv_font_t *font,
+                                          int width, int height, int x, int y)
 {
     lv_obj_t *icon = lv_label_create(tile);
-    lv_label_set_text(icon, glyph);
-    lv_obj_set_style_text_color(icon, icon_color, LV_PART_MAIN);
+    lv_label_set_text(icon, symbol);
+    lv_obj_set_size(icon, width, height);
+    lv_obj_set_pos(icon, x, y);
+    lv_obj_set_style_text_color(icon, color, LV_PART_MAIN);
     lv_obj_set_style_text_font(icon, font, LV_PART_MAIN);
     lv_obj_set_style_text_align(icon, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
-    lv_obj_align(icon, LV_ALIGN_TOP_MID, 0, 40);
+    lv_obj_set_style_pad_all(icon, 0, LV_PART_MAIN);
+    lv_obj_clear_flag(icon, LV_OBJ_FLAG_CLICKABLE);
+    return icon;
+}
+
+static void draw_calculator_icon(lv_obj_t *tile)
+{
+    lv_color_t shell = lv_color_make(0x24, 0x31, 0x3A);
+    lv_color_t edge = lv_color_make(0x67, 0x7C, 0x88);
+    lv_color_t key = lv_color_make(0x55, 0xDD, 0xAA);
+    make_utility_icon_shape(tile, 74, 96, 53, 24, shell, edge, 10);
+    make_utility_icon_shape(tile, 58, 22, 61, 32, lv_color_make(0x08, 0x18, 0x18), edge, 4);
+    make_utility_icon_symbol(tile, "123", key, &lv_font_montserrat_16, 54, 20, 63, 33);
+    for (int row = 0; row < 3; row++) {
+        for (int col = 0; col < 3; col++) {
+            make_utility_icon_shape(tile, 12, 12, 62 + col * 18, 63 + row * 17,
+                                    col == 2 ? lv_color_make(0xFF, 0xB4, 0x55) : key,
+                                    shell, 4);
+        }
+    }
+}
+
+static void draw_editor_icon(lv_obj_t *tile)
+{
+    lv_color_t paper = lv_color_make(0xE5, 0xE8, 0xD5);
+    lv_color_t ink = lv_color_make(0x56, 0xA7, 0xD8);
+    make_utility_icon_shape(tile, 66, 86, 51, 29, paper,
+                            lv_color_make(0x91, 0xA4, 0xA8), 7);
+    for (int i = 0; i < 4; i++) {
+        make_utility_icon_shape(tile, i == 3 ? 31 : 44, 3, 62, 49 + i * 12,
+                                ink, ink, 2);
+    }
+    lv_obj_t *pencil = make_utility_icon_shape(tile, 11, 58, 112, 52,
+                                                lv_color_make(0xFF, 0xCC, 0x66),
+                                                lv_color_make(0xD5, 0x94, 0x33), 4);
+    lv_obj_set_style_transform_pivot_x(pencil, 5, LV_PART_MAIN);
+    lv_obj_set_style_transform_pivot_y(pencil, 29, LV_PART_MAIN);
+    lv_obj_set_style_transform_rotation(pencil, 450, LV_PART_MAIN);
+}
+
+static void draw_files_icon(lv_obj_t *tile)
+{
+    lv_color_t blue = lv_color_make(0x38, 0x9F, 0xE8);
+    lv_color_t edge = lv_color_make(0x81, 0xCE, 0xFF);
+    make_utility_icon_shape(tile, 42, 18, 55, 45, lv_color_make(0x27, 0x78, 0xB4), edge, 6);
+    make_utility_icon_shape(tile, 80, 57, 50, 56, blue, edge, 9);
+    make_utility_icon_shape(tile, 52, 4, 64, 72, lv_color_make(0xA7, 0xE0, 0xFF), blue, 2);
+    make_utility_icon_shape(tile, 38, 4, 64, 84, lv_color_make(0xA7, 0xE0, 0xFF), blue, 2);
+}
+
+static void draw_snake_icon(lv_obj_t *tile)
+{
+    lv_color_t green = lv_color_make(0x55, 0xDD, 0x88);
+    lv_color_t outline = lv_color_make(0x20, 0x8B, 0x52);
+    static const int positions[][2] = {
+        {50, 83}, {70, 83}, {90, 83}, {90, 63}, {110, 63}, {110, 43},
+    };
+    for (const auto &position : positions) {
+        make_utility_icon_shape(tile, 18, 18, position[0], position[1], green, outline, 7);
+    }
+    make_utility_icon_shape(tile, 4, 4, 120, 48, lv_color_white(), lv_color_white(), LV_RADIUS_CIRCLE);
+    make_utility_icon_shape(tile, 4, 4, 120, 55, lv_color_white(), lv_color_white(), LV_RADIUS_CIRCLE);
+}
+
+static void draw_tetris_icon(lv_obj_t *tile)
+{
+    lv_color_t orange = lv_color_make(0xFF, 0xAA, 0x55);
+    lv_color_t gold = lv_color_make(0xFF, 0xD2, 0x55);
+    lv_color_t blue = lv_color_make(0x70, 0xB8, 0xFF);
+    lv_color_t edge = lv_color_make(0x42, 0x4A, 0x55);
+    make_utility_icon_shape(tile, 24, 24, 54, 73, orange, edge, 4);
+    make_utility_icon_shape(tile, 24, 24, 78, 73, orange, edge, 4);
+    make_utility_icon_shape(tile, 24, 24, 102, 73, orange, edge, 4);
+    make_utility_icon_shape(tile, 24, 24, 78, 49, orange, edge, 4);
+    make_utility_icon_shape(tile, 24, 24, 54, 49, blue, edge, 4);
+    make_utility_icon_shape(tile, 24, 24, 102, 49, gold, edge, 4);
+}
+
+static void draw_pacman_icon(lv_obj_t *tile)
+{
+    lv_color_t yellow = lv_color_make(0xFF, 0xE3, 0x45);
+    make_utility_icon_shape(tile, 68, 68, 56, 37, yellow,
+                            lv_color_make(0xD9, 0xA9, 0x21), LV_RADIUS_CIRCLE);
+    make_utility_icon_symbol(tile, LV_SYMBOL_PLAY, lv_color_make(0x11, 0x11, 0x11),
+                             &lv_font_montserrat_24, 28, 30, 94, 56);
+    make_utility_icon_shape(tile, 8, 8, 39, 68, yellow, yellow, LV_RADIUS_CIRCLE);
+    make_utility_icon_shape(tile, 5, 5, 27, 70, yellow, yellow, LV_RADIUS_CIRCLE);
 }
 
 // Upper-left: WiFi — signal glyph in cyan, for the site-survey / ping-sweep tool
@@ -946,6 +1053,7 @@ void tools_screen_create()
     lv_obj_t *t_files      = make_tile(grid, "Files");
     lv_obj_t *t_snake      = make_tile(grid, "Snake");
     lv_obj_t *t_tetris     = make_tile(grid, "Tetris");
+    lv_obj_t *t_pacman     = make_tile(grid, "Pac-Man");
 
     draw_wifi_icon(t_wifi);
     draw_analyzer_icon(t_analyze);
@@ -960,11 +1068,12 @@ void tools_screen_create()
     draw_skimmer_icon(t_skimmer);
     draw_eviltwin_icon(t_eviltwin);
     draw_flock_icon(t_flock);
-    draw_utility_icon(t_calculator, "123", lv_color_make(0x55, 0xDD, 0xAA), &lv_font_montserrat_32);
-    draw_utility_icon(t_editor, "TXT", lv_color_make(0xFF, 0xCC, 0x66), &lv_font_montserrat_28);
-    draw_utility_icon(t_files, "F", lv_color_make(0x66, 0xBB, 0xFF), &lv_font_montserrat_48);
-    draw_utility_icon(t_snake, "~o", lv_color_make(0x55, 0xDD, 0x88), &lv_font_montserrat_40);
-    draw_utility_icon(t_tetris, "T", lv_color_make(0xFF, 0xAA, 0x55), &lv_font_montserrat_48);
+    draw_calculator_icon(t_calculator);
+    draw_editor_icon(t_editor);
+    draw_files_icon(t_files);
+    draw_snake_icon(t_snake);
+    draw_tetris_icon(t_tetris);
+    draw_pacman_icon(t_pacman);
 
     // Tesla CP tile opens the 315 MHz charge-port-open transmit screen.
     lv_obj_add_event_cb(t_tesla, [](lv_event_t *) { tesla_cp_screen_show(); }, LV_EVENT_CLICKED, NULL);
@@ -1017,6 +1126,7 @@ void tools_screen_create()
     lv_obj_add_event_cb(t_files, [](lv_event_t *) { file_explorer_screen_show(); }, LV_EVENT_CLICKED, NULL);
     lv_obj_add_event_cb(t_snake, [](lv_event_t *) { snake_screen_show(); }, LV_EVENT_CLICKED, NULL);
     lv_obj_add_event_cb(t_tetris, [](lv_event_t *) { tetris_screen_show(); }, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(t_pacman, [](lv_event_t *) { pacman_screen_show(); }, LV_EVENT_CLICKED, NULL);
 
     // lv_obj_create() creates objects with LV_OBJ_FLAG_CLICKABLE set by
     // default, so the icon shapes inside each tile would otherwise swallow
