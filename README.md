@@ -434,10 +434,10 @@ If the board isn't auto-detected, pass the port: `pio run -t upload --upload-por
 
 **Easiest — flash from your browser** (no toolchain): open **<https://r3dfish.github.io/13-37/>** in desktop **Chrome** or **Edge**, plug the watch in over USB-C, and click **Install**. (Uses [ESP Web Tools](https://esphome.github.io/esp-web-tools/) over WebSerial.)
 
-**Or with esptool** — just [esptool](https://github.com/espressif/esptool) (`pip install esptool`). Download **`1337-v1.0.3.bin`** from the [latest release](https://github.com/r3dfish/13-37/releases/latest) (a single merged image) and flash it at offset `0x0`:
+**Or with esptool** — just [esptool](https://github.com/espressif/esptool) (`pip install esptool`). Download **`1337-v1.0.4.bin`** from the [latest release](https://github.com/r3dfish/13-37/releases/latest) (a single merged image) and flash it at offset `0x0`:
 
 ```bash
-esptool.py --chip esp32s3 --port /dev/ttyACM0 --baud 921600 write_flash 0x0 1337-v1.0.3.bin
+esptool.py --chip esp32s3 --port /dev/ttyACM0 --baud 921600 write_flash 0x0 1337-v1.0.4.bin
 ```
 
 If you instead have the three separate build artifacts, flash them at their offsets (the bootloader sits at `0x0` on the ESP32-S3, and `boot_app0.bin` ships with the Arduino-ESP32 framework):
@@ -455,7 +455,7 @@ esptool.py --chip esp32s3 --port /dev/ttyACM0 --baud 921600 write_flash \
 From `.pio/build/twatch_ultra/` (with `boot_app0.bin` copied from `~/.platformio/packages/framework-arduinoespressif32/tools/partitions/`):
 
 ```bash
-esptool.py --chip esp32s3 merge_bin -o 1337-v1.0.3.bin \
+esptool.py --chip esp32s3 merge_bin -o 1337-v1.0.4.bin \
   --flash_mode qio --flash_freq 80m --flash_size 16MB \
   0x0 bootloader.bin 0x8000 partitions.bin 0xe000 boot_app0.bin 0x10000 firmware.bin
 ```

@@ -3,7 +3,6 @@
 #include <LV_Helper.h>
 #include <bosch/BoschSensorDataHelper.hpp>
 #include "esp_wifi.h"
-#include "esp_system.h"
 #include <time.h>
 #include <math.h>
 #include "gps_screen.h"
@@ -1168,7 +1167,7 @@ static void update_clock()
 // Firmware name + version surfaced in the boot banner so support tickets carry
 // a fixed anchor. Bump FW_VERSION on each cut.
 #define FW_NAME    "13:37"
-#define FW_VERSION "1.0.3"
+#define FW_VERSION "1.0.4"
 
 void setup()
 {
@@ -1694,32 +1693,16 @@ void loop()
     // only crosses into the heavy capture+SD-write path on the 3 s edge.
     screenshot_poll();
 
-    // GPIO0 short press navigates; a 2.5 s hold reboots on release so GPIO0
-    // is high when reset is asserted and the ROM downloader is not selected.
+    // GPIO0 short press navigates; debounce mechanical switch bounce.
     static uint32_t last_back_ms = 0;
-    static uint32_t back_press_started_ms = 0;
-    static bool back_press_active = false;
-    static bool back_reboot_on_release = false;
     if (back_btn_pressed) {
         back_btn_pressed = false;
         uint32_t now = millis();
-        if (!back_press_active && now - last_back_ms >= 250) {
+        if (now - last_back_ms >= 250) {
             last_back_ms = now;
-            back_press_started_ms = now;
-            back_press_active = true;
-            back_reboot_on_release = false;
             dim_reset_activity();
             if (clock_vibrate) instance.vibrator();
-        }
-    }
-    if (back_press_active) {
-        if (digitalRead(0) == LOW) {
-            if (millis() - back_press_started_ms >= 2500)
-                back_reboot_on_release = true;
-        } else {
-            back_press_active = false;
-            if (back_reboot_on_release) esp_restart();
-            else handle_back_button_short_press();
+            handle_back_button_short_press();
         }
     }
 
