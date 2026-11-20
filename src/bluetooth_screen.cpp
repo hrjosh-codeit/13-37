@@ -25,12 +25,6 @@ static lv_obj_t *val_scans;
 static lv_obj_t *val_scan_type;
 static lv_obj_t *val_connections;
 
-// This screen's claim on the BLE controller, expressed as a no-op scan
-// consumer. While registered, the controller is held up via the
-// reference count in ble_scan_manager; on removal the manager tears it
-// down if no other consumer still wants it.
-static void noop_scan_cb(esp_ble_gap_cb_param_t *) { /* intentionally empty */ }
-
 // Has the user asked the radio to be on via *this* screen? Distinct from
 // the actual controller state — other modules (wardriver, airtag, etc.)
 // can hold the controller up while our claim is off.
@@ -172,14 +166,14 @@ static void on_toggle(lv_event_t *)
         // First add brings the BT controller + Bluedroid stack up; the
         // ref-counted manager handles the case where someone else already
         // had it on.
-        if (ble_scan_add(noop_scan_cb))
+        if (ble_radio_hold())
             s_radio_wanted = true;
         else
             // Controller refused to start — revert the switch so the UI
             // doesn't lie about radio state.
             lv_obj_clear_state(toggle_sw, LV_STATE_CHECKED);
     } else if (!checked && s_radio_wanted) {
-        ble_scan_remove(noop_scan_cb);
+        ble_radio_release();
         s_radio_wanted = false;
     }
     update_status();

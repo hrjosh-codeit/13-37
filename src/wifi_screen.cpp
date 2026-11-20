@@ -2,6 +2,7 @@
 #include "pingsweep.h"
 #include "hostresolve.h"
 #include "portscan_screen.h"
+#include "vacuum_receiver.h"
 #include "radio_policy.h"
 #include <LilyGoLib.h>
 #include <WiFi.h>
@@ -45,6 +46,7 @@ static int       s_net_count = 0;
 static int       s_pending   = -1;   // network index awaiting a password
 static uint32_t  s_connect_start = 0;
 static int       s_shown_dev = -1;   // device count last drawn into the list
+static bool s_vacuum_suspended = false;
 
 // ---- list rendering --------------------------------------------------------
 
@@ -331,6 +333,10 @@ static void exit_password_mode()
 
 static void begin_connect(const char *ssid, const char *pass)
 {
+    if (!s_vacuum_suspended && vacuum_receiver_is_running()) {
+        vacuum_receiver_stop();
+        s_vacuum_suspended = true;
+    }
     WiFi.mode(WIFI_STA);
     if (pass && pass[0]) WiFi.begin(ssid, pass);
     else                 WiFi.begin(ssid);
@@ -374,6 +380,10 @@ static void start_scan()
         update_buttons();
         return;
     }
+    if (!s_vacuum_suspended && vacuum_receiver_is_running()) {
+        vacuum_receiver_stop();
+        s_vacuum_suspended = true;
+    }
     WiFi.mode(WIFI_STA);
     WiFi.scanDelete();
     WiFi.scanNetworks(true);   // async
@@ -402,6 +412,10 @@ static void on_btn2(lv_event_t *)   // DISCONNECT
 {
     pingsweep_stop();
     WiFi.disconnect(true);
+    if (s_vacuum_suspended) {
+        s_vacuum_suspended = false;
+        vacuum_receiver_start();
+    }
     s_state = (s_net_count > 0) ? WST_LIST : WST_IDLE;
     if (s_state == WST_LIST) show_networks();
     else { lv_obj_clean(list_box); placeholder("Tap SCAN to begin"); }
@@ -428,9 +442,17 @@ static void on_refresh(lv_timer_t *)
             }
             WiFi.scanDelete();
             s_state = WST_LIST;
+            if (s_vacuum_suspended) {
+                s_vacuum_suspended = false;
+                vacuum_receiver_start();
+            }
             show_networks();
         } else if (n == WIFI_SCAN_FAILED) {
             s_state = WST_IDLE;
+            if (s_vacuum_suspended) {
+                s_vacuum_suspended = false;
+                vacuum_receiver_start();
+            }
         }
         break;
     }
@@ -442,12 +464,20 @@ static void on_refresh(lv_timer_t *)
         } else if (millis() - s_connect_start > 15000) {
             WiFi.disconnect(true);
             s_state = WST_LIST;
+            if (s_vacuum_suspended) {
+                s_vacuum_suspended = false;
+                vacuum_receiver_start();
+            }
             show_networks();
         }
         break;
     case WST_CONNECTED:
         if (WiFi.status() != WL_CONNECTED) {
             s_state = (s_net_count > 0) ? WST_LIST : WST_IDLE;
+            if (s_vacuum_suspended) {
+                s_vacuum_suspended = false;
+                vacuum_receiver_start();
+            }
             if (s_state == WST_LIST) show_networks();
         } else if (pingsweep_device_count() != s_shown_dev) {
             show_devices();

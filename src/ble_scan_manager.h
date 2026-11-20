@@ -25,6 +25,10 @@ bool ble_scan_add(ble_scan_cb_t cb);
 // is removed.
 void ble_scan_remove(ble_scan_cb_t cb);
 
+// Hold BLE power without starting an active scan.
+bool ble_radio_hold();
+void ble_radio_release();
+
 // True if at least one consumer is registered.
 bool ble_scan_active();
 

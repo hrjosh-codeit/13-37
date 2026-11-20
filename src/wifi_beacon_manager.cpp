@@ -1,4 +1,5 @@
 #include "wifi_beacon_manager.h"
+#include "vacuum_receiver.h"
 #include <WiFi.h>
 #include "esp_wifi.h"
 #include <lvgl.h>
@@ -11,6 +12,7 @@ static int              s_count     = 0;
 static lv_timer_t      *s_hop_timer = nullptr;
 static uint8_t          s_hop_ch    = 1;
 static bool             s_low_power_mode = false;
+static bool             s_vacuum_suspended = false;
 
 static void parse_and_dispatch(const uint8_t *frame, int len,
                                 int8_t rssi, uint8_t ch)
@@ -81,10 +83,16 @@ static void on_channel_hop(lv_timer_t *)
 
 static bool start_wifi()
 {
+    s_vacuum_suspended = vacuum_receiver_is_running();
+    if (s_vacuum_suspended) vacuum_receiver_stop();
     WiFi.mode(WIFI_STA);
     WiFi.disconnect();
     if (esp_wifi_set_promiscuous(true) != ESP_OK) {
         WiFi.mode(WIFI_OFF);
+        if (s_vacuum_suspended) {
+            s_vacuum_suspended = false;
+            vacuum_receiver_start();
+        }
         return false;
     }
     wifi_promiscuous_filter_t filter = {
@@ -104,6 +112,10 @@ static void stop_wifi(bool turn_radio_off = true)
     esp_wifi_set_promiscuous(false);
     esp_wifi_set_promiscuous_rx_cb(nullptr);
     if (turn_radio_off) WiFi.mode(WIFI_OFF);
+    if (s_vacuum_suspended) {
+        s_vacuum_suspended = false;
+        vacuum_receiver_start();
+    }
 }
 
 bool wifi_beacon_add(wifi_beacon_cb_t cb)

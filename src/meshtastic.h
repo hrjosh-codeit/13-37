@@ -5,6 +5,8 @@
 #define MESH_MAX_MESSAGES 20
 #define MESH_MAX_TEXT_LEN 200
 
+bool meshtastic_init();
+
 struct MeshMessage {
     uint32_t from_node;
     uint32_t dest_node;     // OTA dest field. 0xFFFFFFFF = broadcast (channel

@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <esp_heap_caps.h>
 
 static lv_obj_t *s_calc_screen;
 static lv_obj_t *s_calc_value;
@@ -27,7 +28,7 @@ static lv_obj_t *s_explorer_screen;
 static lv_obj_t *s_explorer_list;
 static lv_obj_t *s_explorer_status;
 static char s_explorer_path[96] = "/";
-static char s_explorer_entries[40][96];
+static char (*s_explorer_entries)[96] = nullptr;
 static bool s_explorer_is_dir[40];
 static int s_explorer_count;
 
@@ -51,9 +52,18 @@ static lv_obj_t *s_pacman_screen;
 static lv_obj_t *s_pacman_board;
 static lv_obj_t *s_pacman_status;
 static bool s_pacman_pellets[15][15];
-static int s_pacman_x, s_pacman_y, s_pacman_ghost_x, s_pacman_ghost_y;
+static constexpr int PACMAN_GHOSTS = 4;
+static int s_pacman_x, s_pacman_y;
+static int s_pacman_ghost_x[PACMAN_GHOSTS];
+static int s_pacman_ghost_y[PACMAN_GHOSTS];
 static int s_pacman_dx, s_pacman_dy, s_pacman_score;
+static int s_pacman_next_dx, s_pacman_next_dy;
 static bool s_pacman_running;
+static int s_pacman_lives;
+static int s_pacman_pellets_left;
+static uint32_t s_pacman_frightened_until;
+static uint8_t s_pacman_ticks;
+static uint8_t s_pacman_level;
 
 static lv_timer_t *s_snake_timer;
 static lv_timer_t *s_tetris_timer;
@@ -93,12 +103,13 @@ static lv_obj_t *make_button(lv_obj_t *parent, const char *text,
     return button;
 }
 
-static lv_obj_t *new_screen(const char *title)
+static lv_obj_t *new_screen(const char *title, bool show_back = true)
 {
     lv_obj_t *screen = lv_obj_create(NULL);
     lv_obj_set_style_bg_color(screen, lv_color_black(), LV_PART_MAIN);
     lv_obj_set_style_border_width(screen, 0, LV_PART_MAIN);
-    make_button(screen, "BACK", 64, 38, 122, 54, on_back);
+    if (show_back)
+        make_button(screen, "BACK", 64, 38, 122, 54, on_back);
     lv_obj_t *heading = lv_label_create(screen);
     lv_label_set_text(heading, title);
     lv_obj_set_style_text_color(heading, lv_color_white(), LV_PART_MAIN);
@@ -333,15 +344,25 @@ static void snake_tick(lv_timer_t *)
     for (int i = 0; s_snake_running && i < s_snake_length - (eating ? 0 : 1); i++)
         if (s_snake_x[i] == nx && s_snake_y[i] == ny) s_snake_running = false;
     if (!s_snake_running) {
-        lv_label_set_text(s_snake_status, "Game over - BACK to exit");
+        lv_label_set_text(s_snake_status, "Game over - tap to restart");
         return;
     }
     if (eating && s_snake_length < 144) s_snake_length++;
     for (int i = s_snake_length - 1; i > 0; i--) { s_snake_x[i] = s_snake_x[i - 1]; s_snake_y[i] = s_snake_y[i - 1]; }
     s_snake_x[0] = nx; s_snake_y[0] = ny;
     if (eating) snake_spawn_food();
-    lv_label_set_text_fmt(s_snake_status, "Length %d", s_snake_length);
+    lv_label_set_text_fmt(s_snake_status, "Length %d  Speed %d",
+                          s_snake_length,
+                          1 + (s_snake_length - 3) / 8);
+    int speed_bonus = min(170, max(0, (s_snake_length - 3) * 6));
+    lv_timer_set_period(s_snake_timer, 360 - speed_bonus);
     snake_draw();
+}
+
+static void restart_snake(lv_event_t *)
+{
+    if (s_snake_running) return;
+    snake_screen_show();
 }
 
 static void on_snake_gesture(lv_event_t *event)
@@ -434,7 +455,12 @@ static void tetris_lock()
         }
     }
     tetris_spawn();
-    if (s_tetris_running) lv_label_set_text_fmt(s_tetris_status, "Score %d", s_tetris_score);
+    if (s_tetris_running) {
+        int level = 1 + s_tetris_score / 500;
+        lv_label_set_text_fmt(s_tetris_status, "Score %d  Level %d",
+                              s_tetris_score, level);
+        lv_timer_set_period(s_tetris_timer, 520 - min(320, (level - 1) * 45));
+    }
 }
 
 static void tetris_tick(lv_timer_t *)
@@ -460,12 +486,35 @@ static void on_tetris_gesture(lv_event_t *event)
     tetris_draw();
 }
 
-static const char s_pacman_maze[15][16] = {
-    "###############", "#.....#.......#", "#.###.#.###.#.#",
-    "#o#...#...#...#", "#.#.#####.#.#.#", "#.............#",
-    "###.#.###.#.###", "#...#...#...#.#", "#.#####.#.###.#",
-    "#.......#.....#", "#.###.#.#####.#", "#...#.#...#...#",
-    "#.#.#.###.#.#.#", "#.....#......o#", "###############",
+static void restart_tetris(lv_event_t *)
+{
+    if (s_tetris_running) return;
+    tetris_screen_show();
+}
+
+static constexpr int PACMAN_LEVELS = 3;
+static const char s_pacman_mazes[PACMAN_LEVELS][15][16] = {
+    {
+        "###############", "#.....#.......#", "#.###.#.###.#.#",
+        "#o#...#...#...#", "#.#.#####.#.#.#", "...............",
+        "###.#.###.#.###", "#...#...#...#.#", "#.#####.#.###.#",
+        ".......#.......", "#.###.#.#####.#", "#...#.#...#...#",
+        "#.#.#.###.#.#.#", "#.....#......o#", "###############",
+    },
+    {
+        "###############", "#o....#......o#", "#.###.#.###.#.#",
+        "#.....#...#...#", "#.#.#####.#.#.#", ".......#.......",
+        "###.#.#.#.#.###", "#...#.....#...#", "#.#.###.###.#.#",
+        ".......#.......", "#.###.#.#.###.#", "#...#...#.....#",
+        "#.#.###.#.###.#", "#o....#......o#", "###############",
+    },
+    {
+        "###############", "#....o#...o...#", "#.###.#.#####.#",
+        "#.....#.......#", "#.###.###.###.#", ".......#.......",
+        "###.###.#.#.###", "#...#.......#.#", "#.#.#.###.#.#.#",
+        ".......#.......", "#.#####.#####.#", "#.....#.......#",
+        "#.###.#.###.#.#", "#o...........o#", "###############",
+    },
 };
 
 static void pacman_draw_shape(lv_layer_t *layer, const lv_area_t *area,
@@ -480,6 +529,14 @@ static void pacman_draw_shape(lv_layer_t *layer, const lv_area_t *area,
     lv_draw_rect(layer, &draw_dsc, area);
 }
 
+static constexpr int32_t PACMAN_CELL = 21;
+
+static const char (*pacman_maze())[16]
+{
+    int level = constrain((int)s_pacman_level - 1, 0, PACMAN_LEVELS - 1);
+    return s_pacman_mazes[level];
+}
+
 static void pacman_draw_event(lv_event_t *event)
 {
     lv_layer_t *layer = lv_event_get_layer(event);
@@ -490,17 +547,17 @@ static void pacman_draw_event(lv_event_t *event)
     for (int y = 0; y < 15; y++) {
         for (int x = 0; x < 15; x++) {
             lv_area_t cell_area = {
-                board_area.x1 + x * 19,
-                board_area.y1 + y * 19,
-                board_area.x1 + (x + 1) * 19 - 1,
-                board_area.y1 + (y + 1) * 19 - 1,
+                board_area.x1 + x * PACMAN_CELL,
+                board_area.y1 + y * PACMAN_CELL,
+                board_area.x1 + (x + 1) * PACMAN_CELL - 1,
+                board_area.y1 + (y + 1) * PACMAN_CELL - 1,
             };
-            if (s_pacman_maze[y][x] == '#') {
+            if (pacman_maze()[y][x] == '#') {
                 pacman_draw_shape(layer, &cell_area, lv_color_make(0x00, 0x55, 0xCC), 3);
             } else if (s_pacman_pellets[y][x]) {
-                int32_t size = s_pacman_maze[y][x] == 'o' ? 9 : 4;
-                int32_t center_x = board_area.x1 + x * 19 + 9;
-                int32_t center_y = board_area.y1 + y * 19 + 9;
+                int32_t size = pacman_maze()[y][x] == 'o' ? 9 : 4;
+                int32_t center_x = board_area.x1 + x * PACMAN_CELL + PACMAN_CELL / 2;
+                int32_t center_y = board_area.y1 + y * PACMAN_CELL + PACMAN_CELL / 2;
                 lv_area_t pellet_area = {
                     center_x - size / 2,
                     center_y - size / 2,
@@ -512,38 +569,159 @@ static void pacman_draw_event(lv_event_t *event)
         }
     }
 
-    int32_t player_x = board_area.x1 + s_pacman_x * 19 + 2;
-    int32_t player_y = board_area.y1 + s_pacman_y * 19 + 2;
-    lv_area_t player_area = {player_x, player_y, player_x + 14, player_y + 14};
+    int32_t player_x = board_area.x1 + s_pacman_x * PACMAN_CELL + 2;
+    int32_t player_y = board_area.y1 + s_pacman_y * PACMAN_CELL + 2;
+    lv_area_t player_area = {player_x, player_y,
+                             player_x + PACMAN_CELL - 5,
+                             player_y + PACMAN_CELL - 5};
     pacman_draw_shape(layer, &player_area, lv_color_make(0xFF, 0xEE, 0x00), LV_RADIUS_CIRCLE);
 
-    int32_t ghost_x = board_area.x1 + s_pacman_ghost_x * 19 + 2;
-    int32_t ghost_y = board_area.y1 + s_pacman_ghost_y * 19 + 2;
-    lv_area_t ghost_area = {ghost_x, ghost_y, ghost_x + 14, ghost_y + 14};
-    pacman_draw_shape(layer, &ghost_area, lv_color_make(0xFF, 0x55, 0xAA), 5);
+    if ((s_pacman_ticks & 1) == 0 && s_pacman_running) {
+        lv_draw_triangle_dsc_t mouth;
+        lv_draw_triangle_dsc_init(&mouth);
+        mouth.color = lv_color_black();
+        mouth.opa = LV_OPA_COVER;
+        int center_x = (player_area.x1 + player_area.x2) / 2;
+        int center_y = (player_area.y1 + player_area.y2) / 2;
+        int dx = s_pacman_dx ? s_pacman_dx : 1;
+        int dy = s_pacman_dy;
+        mouth.p[0] = {(float)center_x, (float)center_y};
+        mouth.p[1] = {(float)(center_x + dx * 10 - dy * 5),
+                       (float)(center_y + dy * 10 + dx * 5)};
+        mouth.p[2] = {(float)(center_x + dx * 10 + dy * 5),
+                       (float)(center_y + dy * 10 - dx * 5)};
+        lv_draw_triangle(layer, &mouth);
+    }
+
+    static const lv_color_t ghost_colors[PACMAN_GHOSTS] = {
+        LV_COLOR_MAKE(0xFF, 0x22, 0x22),
+        LV_COLOR_MAKE(0xFF, 0x99, 0xDD),
+        LV_COLOR_MAKE(0x33, 0xDD, 0xFF),
+        LV_COLOR_MAKE(0xFF, 0xAA, 0x33),
+    };
+    for (int ghost = 0; ghost < PACMAN_GHOSTS; ghost++) {
+        int32_t ghost_x = board_area.x1 + s_pacman_ghost_x[ghost] * PACMAN_CELL + 2;
+        int32_t ghost_y = board_area.y1 + s_pacman_ghost_y[ghost] * PACMAN_CELL + 2;
+        lv_area_t ghost_area = {ghost_x, ghost_y,
+                                ghost_x + PACMAN_CELL - 5,
+                                ghost_y + PACMAN_CELL - 5};
+        lv_color_t ghost_color = s_pacman_frightened_until > millis()
+            ? lv_color_make(0x33, 0x66, 0xFF)
+            : ghost_colors[ghost];
+        pacman_draw_shape(layer, &ghost_area, ghost_color, 5);
+        lv_area_t left_eye = {ghost_x + 3, ghost_y + 4, ghost_x + 7, ghost_y + 8};
+        lv_area_t right_eye = {ghost_x + 9, ghost_y + 4, ghost_x + 13, ghost_y + 8};
+        pacman_draw_shape(layer, &left_eye, lv_color_white(), LV_RADIUS_CIRCLE);
+        pacman_draw_shape(layer, &right_eye, lv_color_white(), LV_RADIUS_CIRCLE);
+        left_eye = {ghost_x + 4, ghost_y + 5, ghost_x + 6, ghost_y + 7};
+        right_eye = {ghost_x + 10, ghost_y + 5, ghost_x + 12, ghost_y + 7};
+        pacman_draw_shape(layer, &left_eye, lv_color_black(), LV_RADIUS_CIRCLE);
+        pacman_draw_shape(layer, &right_eye, lv_color_black(), LV_RADIUS_CIRCLE);
+    }
 }
 
 static bool pacman_cell_open(int x, int y)
 {
-    return x >= 0 && x < 15 && y >= 0 && y < 15 && s_pacman_maze[y][x] != '#';
+    if (y == 5 || y == 9) x = (x + 15) % 15;
+    return x >= 0 && x < 15 && y >= 0 && y < 15 &&
+           pacman_maze()[y][x] != '#';
 }
 
-static void pacman_move_ghost()
+static void pacman_wrap_x(int &x, int y)
 {
-    int dx = (s_pacman_x > s_pacman_ghost_x) - (s_pacman_x < s_pacman_ghost_x);
-    int dy = (s_pacman_y > s_pacman_ghost_y) - (s_pacman_y < s_pacman_ghost_y);
-    bool horizontal_first = abs(s_pacman_x - s_pacman_ghost_x) >=
-                            abs(s_pacman_y - s_pacman_ghost_y);
-    for (int attempt = 0; attempt < 2; attempt++) {
-        bool horizontal = (attempt == 0) == horizontal_first;
-        int next_x = s_pacman_ghost_x + (horizontal ? dx : 0);
-        int next_y = s_pacman_ghost_y + (horizontal ? 0 : dy);
-        if ((horizontal ? dx : dy) != 0 && pacman_cell_open(next_x, next_y)) {
-            s_pacman_ghost_x = next_x;
-            s_pacman_ghost_y = next_y;
-            return;
+    if (y == 5 || y == 9) x = (x + 15) % 15;
+}
+
+static void pacman_move_ghost(int ghost)
+{
+    static const int dirs[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+    bool frightened = s_pacman_frightened_until > millis();
+    bool scatter = (millis() / 1000) % 20 < 5;
+    static const int scatter_targets[PACMAN_GHOSTS][2] = {
+        {14, 1}, {1, 1}, {14, 13}, {1, 13}
+    };
+    int target_x = scatter ? scatter_targets[ghost][0] : s_pacman_x;
+    int target_y = scatter ? scatter_targets[ghost][1] : s_pacman_y;
+    if (!scatter && ghost == 1) {
+        target_x += s_pacman_dx * 3;
+        target_y += s_pacman_dy * 3;
+    } else if (!scatter && ghost == 2) {
+        target_x = s_pacman_x * 2 - s_pacman_ghost_x[0];
+        target_y = s_pacman_y * 2 - s_pacman_ghost_y[0];
+    } else if (!scatter && ghost == 3 &&
+               abs(s_pacman_x - s_pacman_ghost_x[ghost]) +
+               abs(s_pacman_y - s_pacman_ghost_y[ghost]) < 6) {
+        target_x = 0;
+        target_y = 13;
+    }
+    int best_score = frightened ? -32768 : 32767;
+    int best_x = s_pacman_ghost_x[ghost];
+    int best_y = s_pacman_ghost_y[ghost];
+    for (int i = 0; i < 4; i++) {
+        int next_x = s_pacman_ghost_x[ghost] + dirs[i][0];
+        int next_y = s_pacman_ghost_y[ghost] + dirs[i][1];
+        if (!pacman_cell_open(next_x, next_y)) continue;
+        pacman_wrap_x(next_x, next_y);
+        int distance = abs(target_x - next_x) + abs(target_y - next_y);
+        int score = distance + (int)random(0, 4);
+        if ((frightened && score > best_score) ||
+            (!frightened && score < best_score)) {
+            best_score = score;
+            best_x = next_x;
+            best_y = next_y;
         }
     }
+    s_pacman_ghost_x[ghost] = best_x;
+    s_pacman_ghost_y[ghost] = best_y;
+}
+
+static void pacman_reset_positions()
+{
+    s_pacman_x = 1;
+    s_pacman_y = 1;
+    static const int homes[PACMAN_GHOSTS][2] = {
+        {13, 13}, {11, 13}, {5, 13}, {3, 13}
+    };
+    for (int i = 0; i < PACMAN_GHOSTS; i++) {
+        s_pacman_ghost_x[i] = homes[i][0];
+        s_pacman_ghost_y[i] = homes[i][1];
+    }
+    s_pacman_dx = 0;
+    s_pacman_dy = 0;
+    s_pacman_next_dx = 0;
+    s_pacman_next_dy = 0;
+    s_pacman_frightened_until = 0;
+}
+
+static void pacman_begin_level()
+{
+    for (int y = 0; y < 15; y++) {
+        for (int x = 0; x < 15; x++) {
+            s_pacman_pellets[y][x] =
+                pacman_maze()[y][x] == '.' || pacman_maze()[y][x] == 'o';
+        }
+    }
+    s_pacman_pellets_left = 0;
+    for (int y = 0; y < 15; y++)
+        for (int x = 0; x < 15; x++)
+            if (s_pacman_pellets[y][x]) s_pacman_pellets_left++;
+    s_pacman_ticks = 0;
+    pacman_reset_positions();
+    s_pacman_running = true;
+    lv_label_set_text_fmt(s_pacman_status,
+                          "Level %d  Score %d  Lives %d",
+                          s_pacman_level, s_pacman_score, s_pacman_lives);
+    lv_obj_invalidate(s_pacman_board);
+    lv_timer_resume(s_pacman_timer);
+    lv_timer_set_period(s_pacman_timer, 320 - (s_pacman_level - 1) * 30);
+}
+
+static void pacman_restart()
+{
+    s_pacman_level = 1;
+    s_pacman_score = 0;
+    s_pacman_lives = 3;
+    pacman_begin_level();
 }
 
 static void pacman_tick(lv_timer_t *timer)
@@ -554,31 +732,79 @@ static void pacman_tick(lv_timer_t *timer)
     }
 
     int old_x = s_pacman_x, old_y = s_pacman_y;
-    int old_ghost_x = s_pacman_ghost_x, old_ghost_y = s_pacman_ghost_y;
     bool pellet_eaten = false;
+    if ((s_pacman_next_dx || s_pacman_next_dy) &&
+        pacman_cell_open(s_pacman_x + s_pacman_next_dx,
+                         s_pacman_y + s_pacman_next_dy)) {
+        s_pacman_dx = s_pacman_next_dx;
+        s_pacman_dy = s_pacman_next_dy;
+    }
     int next_x = s_pacman_x + s_pacman_dx;
     int next_y = s_pacman_y + s_pacman_dy;
     if (pacman_cell_open(next_x, next_y)) {
+        pacman_wrap_x(next_x, next_y);
         s_pacman_x = next_x;
         s_pacman_y = next_y;
         if (s_pacman_pellets[next_y][next_x]) {
             s_pacman_pellets[next_y][next_x] = false;
-            s_pacman_score += s_pacman_maze[next_y][next_x] == 'o' ? 50 : 10;
+            bool power = pacman_maze()[next_y][next_x] == 'o';
+            s_pacman_score += power ? 50 : 10;
+            if (power) s_pacman_frightened_until = millis() + 5000;
+            s_pacman_pellets_left--;
             pellet_eaten = true;
         }
     }
-    pacman_move_ghost();
+    if (++s_pacman_ticks % 2 == 0) {
+        for (int i = 0; i < PACMAN_GHOSTS; i++) pacman_move_ghost(i);
+    }
 
-    if (s_pacman_x == s_pacman_ghost_x && s_pacman_y == s_pacman_ghost_y) {
-        s_pacman_running = false;
-        lv_label_set_text_fmt(s_pacman_status, "Caught - score %d", s_pacman_score);
-        lv_timer_pause(timer);
+    bool ghost_collision = false;
+    int collided_ghost = -1;
+    for (int i = 0; i < PACMAN_GHOSTS; i++) {
+        if (s_pacman_x == s_pacman_ghost_x[i] &&
+            s_pacman_y == s_pacman_ghost_y[i]) {
+            ghost_collision = true;
+            collided_ghost = i;
+            break;
+        }
+    }
+    if (ghost_collision) {
+        if (s_pacman_frightened_until > millis()) {
+            s_pacman_score += 200;
+            static const int homes[PACMAN_GHOSTS][2] = {
+                {13, 13}, {11, 13}, {5, 13}, {3, 13}
+            };
+            s_pacman_ghost_x[collided_ghost] = homes[collided_ghost][0];
+            s_pacman_ghost_y[collided_ghost] = homes[collided_ghost][1];
+        } else if (--s_pacman_lives <= 0) {
+            s_pacman_running = false;
+            lv_label_set_text_fmt(s_pacman_status,
+                                  "Game over - score %d - tap", s_pacman_score);
+            lv_timer_pause(timer);
+        } else {
+            pacman_reset_positions();
+            lv_label_set_text_fmt(s_pacman_status, "Caught!  Lives %d",
+                                  s_pacman_lives);
+        }
+    } else if (s_pacman_pellets_left == 0) {
+        if (s_pacman_level < PACMAN_LEVELS) {
+            s_pacman_level++;
+            pacman_begin_level();
+        } else {
+            s_pacman_running = false;
+            lv_label_set_text_fmt(s_pacman_status,
+                                  "All 3 levels cleared!  %d - tap",
+                                  s_pacman_score);
+            lv_timer_pause(timer);
+        }
     } else if (pellet_eaten) {
-        lv_label_set_text_fmt(s_pacman_status, "Score %d", s_pacman_score);
+        lv_label_set_text_fmt(s_pacman_status, "L%d  Score %d  Lives %d",
+                              s_pacman_level, s_pacman_score,
+                              s_pacman_lives);
     }
 
     if (s_pacman_x != old_x || s_pacman_y != old_y ||
-        s_pacman_ghost_x != old_ghost_x || s_pacman_ghost_y != old_ghost_y) {
+        s_pacman_ticks % 2 == 0) {
         lv_obj_invalidate(s_pacman_board);
     }
 }
@@ -589,8 +815,15 @@ static void on_pacman_gesture(lv_event_t *event)
     lv_indev_t *indev = lv_event_get_indev(event);
     if (!indev) return;
     lv_dir_t direction = lv_indev_get_gesture_dir(indev);
-    s_pacman_dx = direction == LV_DIR_LEFT ? -1 : direction == LV_DIR_RIGHT ? 1 : 0;
-    s_pacman_dy = direction == LV_DIR_TOP ? -1 : direction == LV_DIR_BOTTOM ? 1 : 0;
+    s_pacman_next_dx = direction == LV_DIR_LEFT ? -1 :
+                       direction == LV_DIR_RIGHT ? 1 : 0;
+    s_pacman_next_dy = direction == LV_DIR_TOP ? -1 :
+                       direction == LV_DIR_BOTTOM ? 1 : 0;
+}
+
+static void on_pacman_clicked(lv_event_t *)
+{
+    if (!s_pacman_running) pacman_restart();
 }
 
 static void on_pacman_screen_unload(lv_event_t *)
@@ -603,27 +836,31 @@ static void add_swipe_hint(lv_obj_t *screen, const char *text);
 
 static void pacman_screen_create()
 {
-    s_pacman_screen = new_screen("PAC-MAN");
+    s_pacman_screen = new_screen("PAC-MAN", false);
     s_pacman_status = lv_label_create(s_pacman_screen);
     lv_obj_set_style_text_color(s_pacman_status, lv_color_make(0xFF, 0xDD, 0x55), LV_PART_MAIN);
     lv_obj_set_style_text_font(s_pacman_status, &lv_font_montserrat_16, LV_PART_MAIN);
-    lv_obj_align(s_pacman_status, LV_ALIGN_TOP_MID, 0, 62);
+    lv_obj_align(s_pacman_status, LV_ALIGN_TOP_MID, 0, 44);
 
     s_pacman_board = lv_obj_create(s_pacman_screen);
-    lv_obj_set_size(s_pacman_board, 285, 285);
+    lv_obj_set_size(s_pacman_board, PACMAN_CELL * 15, PACMAN_CELL * 15);
     lv_obj_set_pos(s_pacman_board,
-                   (lv_display_get_horizontal_resolution(lv_display_get_default()) - 285) / 2,
-                   92);
+                   (lv_display_get_horizontal_resolution(lv_display_get_default()) -
+                    PACMAN_CELL * 15) / 2,
+                   72);
     lv_obj_set_style_bg_opa(s_pacman_board, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_border_width(s_pacman_board, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(s_pacman_board, 0, LV_PART_MAIN);
     lv_obj_clear_flag(s_pacman_board, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_event_cb(s_pacman_board, pacman_draw_event, LV_EVENT_DRAW_MAIN, nullptr);
     lv_obj_add_event_cb(s_pacman_board, on_pacman_gesture, LV_EVENT_GESTURE, nullptr);
+    lv_obj_add_event_cb(s_pacman_board, on_pacman_clicked, LV_EVENT_CLICKED, nullptr);
+    lv_obj_add_event_cb(s_pacman_screen, on_pacman_gesture, LV_EVENT_GESTURE, nullptr);
+    lv_obj_add_event_cb(s_pacman_screen, on_pacman_clicked, LV_EVENT_CLICKED, nullptr);
     lv_obj_add_event_cb(s_pacman_screen, on_pacman_screen_unload, LV_EVENT_SCREEN_UNLOAD_START, nullptr);
 
-    add_swipe_hint(s_pacman_screen, "Swipe to move");
-    s_pacman_timer = lv_timer_create(pacman_tick, 420, nullptr);
+    add_swipe_hint(s_pacman_screen, "Swipe any direction - turns are buffered");
+    s_pacman_timer = lv_timer_create(pacman_tick, 320, nullptr);
     lv_timer_pause(s_pacman_timer);
 }
 
@@ -638,6 +875,11 @@ static void add_swipe_hint(lv_obj_t *screen, const char *text)
 
 void utility_apps_create()
 {
+    s_explorer_entries = (char (*)[96])heap_caps_calloc(
+        40, 96, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!s_explorer_entries)
+        Serial.println("[UTIL] Explorer PSRAM allocation failed");
+
     s_calc_screen = new_screen("CALCULATOR");
     s_calc_value = lv_label_create(s_calc_screen);
     lv_obj_set_size(s_calc_value, 300, 72);
@@ -700,45 +942,49 @@ void utility_apps_create()
     lv_obj_set_scroll_dir(s_explorer_list, LV_DIR_VER);
     lv_obj_set_scrollbar_mode(s_explorer_list, LV_SCROLLBAR_MODE_AUTO);
 
-    s_snake_screen = new_screen("SNAKE");
+    s_snake_screen = new_screen("SNAKE", false);
     s_snake_status = lv_label_create(s_snake_screen);
     lv_obj_set_style_text_color(s_snake_status, lv_color_make(0x00, 0xDD, 0x88), LV_PART_MAIN);
     lv_obj_set_style_text_font(s_snake_status, &lv_font_montserrat_16, LV_PART_MAIN);
-    lv_obj_align(s_snake_status, LV_ALIGN_TOP_MID, 0, 62);
-    s_snake_origin_x = (lv_display_get_horizontal_resolution(lv_display_get_default()) - 288) / 2;
+    lv_obj_align(s_snake_status, LV_ALIGN_TOP_MID, 0, 42);
+    s_snake_origin_x = (lv_display_get_horizontal_resolution(lv_display_get_default()) - 336) / 2;
     for (int y = 0; y < 12; y++) for (int x = 0; x < 12; x++) {
         lv_obj_t *cell = lv_obj_create(s_snake_screen);
         s_snake_cells[y][x] = cell;
-        lv_obj_set_size(cell, 24, 24);
-        lv_obj_set_pos(cell, s_snake_origin_x + x * 24, 90 + y * 24);
+        lv_obj_set_size(cell, 28, 28);
+        lv_obj_set_pos(cell, s_snake_origin_x + x * 28, 66 + y * 28);
         lv_obj_set_style_bg_color(cell, lv_color_make(0x08, 0x08, 0x08), LV_PART_MAIN);
         lv_obj_set_style_border_color(cell, lv_color_make(0x22, 0x22, 0x22), LV_PART_MAIN);
         lv_obj_set_style_border_width(cell, 1, LV_PART_MAIN);
         lv_obj_set_style_pad_all(cell, 0, LV_PART_MAIN);
         lv_obj_clear_flag(cell, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_add_flag(cell, LV_OBJ_FLAG_EVENT_BUBBLE);
     }
     add_swipe_hint(s_snake_screen, "Swipe to steer");
     lv_obj_add_event_cb(s_snake_screen, on_snake_gesture, LV_EVENT_GESTURE, nullptr);
+    lv_obj_add_event_cb(s_snake_screen, restart_snake, LV_EVENT_CLICKED, nullptr);
     s_snake_timer = lv_timer_create(snake_tick, 360, nullptr);
 
-    s_tetris_screen = new_screen("TETRIS");
+    s_tetris_screen = new_screen("TETRIS", false);
     s_tetris_status = lv_label_create(s_tetris_screen);
     lv_obj_set_style_text_color(s_tetris_status, lv_color_make(0xFF, 0xCC, 0x33), LV_PART_MAIN);
     lv_obj_set_style_text_font(s_tetris_status, &lv_font_montserrat_16, LV_PART_MAIN);
-    lv_obj_align(s_tetris_status, LV_ALIGN_TOP_MID, 0, 62);
-    s_tetris_origin_x = (lv_display_get_horizontal_resolution(lv_display_get_default()) - 240) / 2;
+    lv_obj_align(s_tetris_status, LV_ALIGN_TOP_MID, 0, 42);
+    s_tetris_origin_x = (lv_display_get_horizontal_resolution(lv_display_get_default()) - 280) / 2;
     for (int y = 0; y < 12; y++) for (int x = 0; x < 10; x++) {
         lv_obj_t *cell = lv_obj_create(s_tetris_screen);
         s_tetris_cells[y][x] = cell;
-        lv_obj_set_size(cell, 24, 24);
-        lv_obj_set_pos(cell, s_tetris_origin_x + x * 24, 90 + y * 24);
+        lv_obj_set_size(cell, 28, 28);
+        lv_obj_set_pos(cell, s_tetris_origin_x + x * 28, 66 + y * 28);
         lv_obj_set_style_bg_color(cell, lv_color_black(), LV_PART_MAIN);
         lv_obj_set_style_border_color(cell, lv_color_make(0x33, 0x33, 0x33), LV_PART_MAIN);
         lv_obj_set_style_border_width(cell, 1, LV_PART_MAIN);
         lv_obj_clear_flag(cell, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_add_flag(cell, LV_OBJ_FLAG_EVENT_BUBBLE);
     }
-    add_swipe_hint(s_tetris_screen, "Swipe sideways to move, up to rotate, down to drop");
+    add_swipe_hint(s_tetris_screen, "Swipe: move, rotate, soft drop");
     lv_obj_add_event_cb(s_tetris_screen, on_tetris_gesture, LV_EVENT_GESTURE, nullptr);
+    lv_obj_add_event_cb(s_tetris_screen, restart_tetris, LV_EVENT_CLICKED, nullptr);
     s_tetris_timer = lv_timer_create(tetris_tick, 520, nullptr);
 
 }
@@ -773,32 +1019,31 @@ void snake_screen_show()
     s_snake_running = true; s_snake_length = 3; s_snake_dx = 1; s_snake_dy = 0;
     s_snake_x[0] = 5; s_snake_y[0] = 6; s_snake_x[1] = 4; s_snake_y[1] = 6; s_snake_x[2] = 3; s_snake_y[2] = 6;
     snake_spawn_food(); snake_draw(); lv_label_set_text(s_snake_status, "Length 3"); lv_scr_load(s_snake_screen);
+    lv_timer_set_period(s_snake_timer, 360);
 }
 
 void tetris_screen_show()
 {
     memset(s_tetris_board, 0, sizeof(s_tetris_board)); s_tetris_score = 0; s_tetris_running = true;
     tetris_spawn(); tetris_draw(); lv_label_set_text(s_tetris_status, "Score 0"); lv_scr_load(s_tetris_screen);
+    lv_timer_set_period(s_tetris_timer, 520);
 }
 
 void pacman_screen_show()
 {
     if (!s_pacman_screen) pacman_screen_create();
-    for (int y = 0; y < 15; y++) {
-        for (int x = 0; x < 15; x++) {
-            s_pacman_pellets[y][x] = s_pacman_maze[y][x] == '.' || s_pacman_maze[y][x] == 'o';
-        }
-    }
-    s_pacman_x = 1;
-    s_pacman_y = 1;
-    s_pacman_ghost_x = 13;
-    s_pacman_ghost_y = 13;
-    s_pacman_dx = 0;
-    s_pacman_dy = 0;
-    s_pacman_score = 0;
-    s_pacman_running = true;
-    lv_label_set_text(s_pacman_status, "Score 0");
-    lv_obj_invalidate(s_pacman_board);
+    pacman_restart();
     lv_scr_load(s_pacman_screen);
-    lv_timer_resume(s_pacman_timer);
+}
+
+bool utility_game_screen_is_active()
+{
+    lv_obj_t *active = lv_screen_active();
+    return active == s_snake_screen || active == s_tetris_screen ||
+           active == s_pacman_screen;
+}
+
+void utility_game_exit()
+{
+    on_back(NULL);
 }

@@ -6,6 +6,7 @@
 
 static ble_scan_cb_t s_consumers[BLE_SCAN_MAX_CONSUMERS] = {};
 static int           s_consumer_count = 0;
+static int           s_radio_holds = 0;
 static bool          s_low_power_mode = false;
 
 static void set_scan_params();
@@ -86,7 +87,8 @@ bool ble_scan_add(ble_scan_cb_t cb)
 
     if (s_consumer_count >= BLE_SCAN_MAX_CONSUMERS) return false;
 
-    bool first = (s_consumer_count == 0);
+    bool first = (s_consumer_count == 0 && s_radio_holds == 0);
+    bool first_scanner = (s_consumer_count == 0);
     s_consumers[s_consumer_count++] = cb;
 
     if (first) {
@@ -94,6 +96,8 @@ bool ble_scan_add(ble_scan_cb_t cb)
             s_consumer_count--;
             return false;
         }
+    } else if (first_scanner) {
+        set_scan_params();
     }
     return true;
 }
@@ -105,11 +109,30 @@ void ble_scan_remove(ble_scan_cb_t cb)
             for (int j = i; j < s_consumer_count - 1; j++)
                 s_consumers[j] = s_consumers[j + 1];
             s_consumers[--s_consumer_count] = nullptr;
-            if (s_consumer_count == 0)
+            if (s_consumer_count == 0 && s_radio_holds == 0)
                 tear_down_controller();
             return;
         }
     }
+}
+
+bool ble_radio_hold()
+{
+    bool first = (s_consumer_count == 0 && s_radio_holds == 0);
+    s_radio_holds++;
+    if (first && !bring_up_controller()) {
+        s_radio_holds--;
+        return false;
+    }
+    return true;
+}
+
+void ble_radio_release()
+{
+    if (s_radio_holds == 0) return;
+    s_radio_holds--;
+    if (s_radio_holds == 0 && s_consumer_count == 0)
+        tear_down_controller();
 }
 
 bool ble_scan_active()

@@ -8,3 +8,5 @@ void file_explorer_screen_show();
 void snake_screen_show();
 void tetris_screen_show();
 void pacman_screen_show();
+bool utility_game_screen_is_active();
+void utility_game_exit();

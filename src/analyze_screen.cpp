@@ -1,5 +1,6 @@
 #include "analyze_screen.h"
 #include "bt_analyze_screen.h"
+#include "vacuum_receiver.h"
 #include "radio_policy.h"
 #include <LilyGoLib.h>
 #include <WiFi.h>
@@ -54,6 +55,7 @@ static int      s_cur_ch     = 1;          // 1-based channel currently tuned
 static uint32_t s_hop_start  = 0;
 static uint32_t s_total_pkts = 0;
 static bool     s_running    = false;
+static bool     s_vacuum_suspended = false;
 static bool     s_low_power_mode = false;
 
 // WiFi mode at the moment we entered the analyzer — stop_analysis() restores
@@ -76,6 +78,8 @@ static void promisc_cb(void *buf, wifi_promiscuous_pkt_type_t type)
 static void start_analysis()
 {
     if (s_running) return;
+    s_vacuum_suspended = vacuum_receiver_is_running();
+    if (s_vacuum_suspended) vacuum_receiver_stop();
     if (s_low_power_mode || radio_policy_low_power_mode()) {
         lv_label_set_text(status_label, "Low Power: scans are blocked");
         return;
@@ -126,6 +130,10 @@ static void stop_analysis()
         WiFi.mode(s_prev_wifi_mode);
     }
     s_running = false;
+    if (s_vacuum_suspended) {
+        s_vacuum_suspended = false;
+        vacuum_receiver_start();
+    }
 }
 
 // ---- per-tick state machine + redraw ---------------------------------------

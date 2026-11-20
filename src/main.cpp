@@ -54,6 +54,8 @@
 #include "matrix_bg.h"
 #include "nfc_icon.h"
 #include "utility_apps.h"
+#include "vacuum_receiver.h"
+#include "vacuum_screen.h"
 
 static lv_obj_t *clock_screen;
 static lv_obj_t *time_label;
@@ -61,6 +63,7 @@ static lv_span_t *s_span_hours;
 static lv_span_t *s_span_colon;
 static lv_span_t *s_span_rest;
 static lv_obj_t *date_label;
+static lv_obj_t *vacuum_clock_label;
 static lv_obj_t *gps_indicator;
 static lv_obj_t *wardriver_container;
 static lv_obj_t *wardriver_wifi_label;
@@ -582,6 +585,13 @@ static lv_obj_t *build_clock_icon(lv_obj_t *parent, bool wide_cap,
 
 static volatile bool back_btn_pressed = false;
 static void IRAM_ATTR on_back_btn_isr() { back_btn_pressed = true; }
+
+static void enter_deep_sleep()
+{
+    const WakeupSource_t wake_sources =
+        (WakeupSource_t)(WAKEUP_SRC_POWER_KEY | WAKEUP_SRC_BOOT_BUTTON);
+    instance.sleep(wake_sources, false);
+}
 
 static void update_wardriver_indicator()
 {
@@ -1162,12 +1172,33 @@ static void update_clock()
     else
         date_buf[0] = '\0';
     lv_label_set_text(date_label, date_buf);
+
+    if (vacuum_clock_label) {
+        VacuumReading reading = {};
+        vacuum_receiver_get_reading(&reading);
+        uint32_t age_ms = reading.valid
+            ? (uint32_t)(millis() - reading.received_ms)
+            : UINT32_MAX;
+        if (reading.valid && age_ms <= 3000) {
+            char value[40];
+            if (reading.pressure_torr < 1.0f)
+                snprintf(value, sizeof(value), "VAC  %.1f mTorr",
+                         reading.pressure_torr * 1000.0f);
+            else
+                snprintf(value, sizeof(value), "VAC  %.2f Torr",
+                         reading.pressure_torr);
+            lv_label_set_text(vacuum_clock_label, value);
+            lv_obj_clear_flag(vacuum_clock_label, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(vacuum_clock_label, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
 }
 
 // Firmware name + version surfaced in the boot banner so support tickets carry
 // a fixed anchor. Bump FW_VERSION on each cut.
 #define FW_NAME    "13:37"
-#define FW_VERSION "1.0.4"
+#define FW_VERSION "1.0.6-superbee"
 
 void setup()
 {
@@ -1177,6 +1208,7 @@ void setup()
                   FW_NAME, FW_VERSION, __DATE__, __TIME__);
 
     instance.begin();
+    meshtastic_init();
     instance.powerControl(POWER_NFC, false); // ensure NFC is off on boot
     beginLvglHelper(instance);
 
@@ -1312,6 +1344,19 @@ void setup()
     lv_obj_set_style_text_align(date_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     lv_label_set_text(date_label, "");
     lv_obj_align(date_label, LV_ALIGN_CENTER, 0, 60);
+
+    vacuum_clock_label = lv_label_create(clock_screen);
+    lv_obj_set_style_text_color(vacuum_clock_label,
+                                lv_color_make(0xFF, 0xCF, 0x24),
+                                LV_PART_MAIN);
+    lv_obj_set_style_text_font(vacuum_clock_label,
+                               &lv_font_montserrat_20,
+                               LV_PART_MAIN);
+    lv_obj_set_style_text_align(vacuum_clock_label,
+                                LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+    lv_label_set_text(vacuum_clock_label, "");
+    lv_obj_align(vacuum_clock_label, LV_ALIGN_CENTER, 0, 110);
+    lv_obj_add_flag(vacuum_clock_label, LV_OBJ_FLAG_HIDDEN);
 
     build_battery_widget(clock_screen);
 
@@ -1539,6 +1584,7 @@ void setup()
     channels_screen_create();
     settings_screen_create();
     utility_apps_create();
+    vacuum_screen_create();
     tools_screen_create();
     tpms_screen_create();
     pager_screen_create();
@@ -1677,6 +1723,10 @@ static void handle_back_button_short_press()
         bt_analyze_screen_stop();
         lora_analyze_screen_stop();
         tools_screen_show();
+    } else if (vacuum_screen_is_active()) {
+        tools_screen_show();
+    } else if (utility_game_screen_is_active()) {
+        utility_game_exit();
     } else if (lv_screen_active() == clock_screen) {
         settings_screen_show();
     } else {
@@ -1687,22 +1737,53 @@ static void handle_back_button_short_press()
 void loop()
 {
     instance.loop(); // required for power button and PMU event dispatch
+    vacuum_receiver_poll();
     motion_wake_poll();   // accel-driven wake; no-op when toggle is off
     timezone_bg_tick();   // apply background WiFi NTP/geolocation results
     // Cheap on every iteration (an indev_state read + a millis() compare);
     // only crosses into the heavy capture+SD-write path on the 3 s edge.
     screenshot_poll();
 
-    // GPIO0 short press navigates; debounce mechanical switch bounce.
+    // GPIO0 short press navigates; a 5 second hold enters deep sleep.
+    // Only physical power/BOOT buttons wake it again; touch is deliberately
+    // excluded from the wake source.
     static uint32_t last_back_ms = 0;
+    static bool back_press_tracking = false;
+    static uint32_t back_press_start_ms = 0;
+    static bool back_level_initialized = false;
+    static bool back_was_low = false;
+    bool back_is_low = digitalRead(0) == LOW;
+    if (!back_level_initialized) {
+        back_level_initialized = true;
+        back_was_low = back_is_low;
+    } else if (back_is_low && !back_was_low && !back_press_tracking) {
+        back_press_tracking = true;
+        back_press_start_ms = millis();
+    }
+    back_was_low = back_is_low;
     if (back_btn_pressed) {
         back_btn_pressed = false;
+        if (!back_press_tracking) {
+            back_press_tracking = true;
+            back_press_start_ms = millis();
+        }
+    }
+    if (back_press_tracking) {
         uint32_t now = millis();
-        if (now - last_back_ms >= 250) {
-            last_back_ms = now;
-            dim_reset_activity();
-            if (clock_vibrate) instance.vibrator();
-            handle_back_button_short_press();
+        if (back_is_low) {
+            if (now - back_press_start_ms >= 5000) {
+                if (clock_vibrate) instance.vibrator();
+                enter_deep_sleep();
+            }
+        } else {
+            uint32_t held_ms = now - back_press_start_ms;
+            back_press_tracking = false;
+            if (held_ms >= 40 && now - last_back_ms >= 250) {
+                last_back_ms = now;
+                dim_reset_activity();
+                if (clock_vibrate) instance.vibrator();
+                handle_back_button_short_press();
+            }
         }
     }
 

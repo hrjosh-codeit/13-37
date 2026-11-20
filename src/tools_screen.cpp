@@ -13,6 +13,7 @@
 #include "wifi_screen.h"
 #include "analyze_screen.h"
 #include "utility_apps.h"
+#include "vacuum_screen.h"
 #include <LilyGoLib.h>
 
 // Defined in main.cpp
@@ -204,6 +205,34 @@ static void draw_calculator_icon(lv_obj_t *tile)
                                     shell, 4);
         }
     }
+}
+
+static void draw_vacuum_icon(lv_obj_t *tile)
+{
+    lv_color_t yellow = lv_color_make(0xFF, 0xCF, 0x24);
+    lv_color_t shell = lv_color_make(0x19, 0x1B, 0x1C);
+    make_utility_icon_shape(tile, 94, 94, 43, 25, shell,
+                            lv_color_make(0x75, 0x7A, 0x7D), 47);
+    lv_obj_t *arc = lv_arc_create(tile);
+    lv_obj_set_size(arc, 72, 72);
+    lv_obj_set_style_bg_opa(arc, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_arc_color(arc, lv_color_make(0x43, 0x4A, 0x4E),
+                               LV_PART_MAIN);
+    lv_obj_set_style_arc_width(arc, 5, LV_PART_MAIN);
+    lv_obj_set_style_arc_color(arc, yellow, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_width(arc, 5, LV_PART_INDICATOR);
+    lv_obj_set_style_bg_opa(arc, LV_OPA_TRANSP, LV_PART_KNOB);
+    lv_arc_set_bg_angles(arc, 135, 405);
+    lv_arc_set_angles(arc, 135, 300);
+    lv_obj_clear_flag(arc, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_clear_flag(arc, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_align(arc, LV_ALIGN_TOP_MID, 0, 36);
+    lv_obj_t *needle = make_utility_icon_shape(tile, 4, 34, 87, 52,
+                                               yellow, yellow, 2);
+    lv_obj_set_style_transform_pivot_x(needle, 2, LV_PART_MAIN);
+    lv_obj_set_style_transform_pivot_y(needle, 30, LV_PART_MAIN);
+    lv_obj_set_style_transform_rotation(needle, 180, LV_PART_MAIN);
+    make_utility_icon_shape(tile, 18, 18, 80, 78, yellow, yellow, 9);
 }
 
 static void draw_editor_icon(lv_obj_t *tile)
@@ -1054,6 +1083,7 @@ void tools_screen_create()
     lv_obj_t *t_snake      = make_tile(grid, "Snake");
     lv_obj_t *t_tetris     = make_tile(grid, "Tetris");
     lv_obj_t *t_pacman     = make_tile(grid, "Pac-Man");
+    lv_obj_t *t_vacuum     = make_tile(grid, "Vacuum");
 
     draw_wifi_icon(t_wifi);
     draw_analyzer_icon(t_analyze);
@@ -1074,6 +1104,7 @@ void tools_screen_create()
     draw_snake_icon(t_snake);
     draw_tetris_icon(t_tetris);
     draw_pacman_icon(t_pacman);
+    draw_vacuum_icon(t_vacuum);
 
     // Tesla CP tile opens the 315 MHz charge-port-open transmit screen.
     lv_obj_add_event_cb(t_tesla, [](lv_event_t *) { tesla_cp_screen_show(); }, LV_EVENT_CLICKED, NULL);
@@ -1126,6 +1157,7 @@ void tools_screen_create()
     lv_obj_add_event_cb(t_files, [](lv_event_t *) { file_explorer_screen_show(); }, LV_EVENT_CLICKED, NULL);
     lv_obj_add_event_cb(t_snake, [](lv_event_t *) { snake_screen_show(); }, LV_EVENT_CLICKED, NULL);
     lv_obj_add_event_cb(t_tetris, [](lv_event_t *) { tetris_screen_show(); }, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(t_vacuum, [](lv_event_t *) { vacuum_screen_show(); }, LV_EVENT_CLICKED, NULL);
     lv_obj_add_event_cb(t_pacman, [](lv_event_t *) { pacman_screen_show(); }, LV_EVENT_CLICKED, NULL);
 
     // lv_obj_create() creates objects with LV_OBJ_FLAG_CLICKABLE set by
