@@ -13,6 +13,7 @@ static lv_obj_t *s_mbar_label;
 static lv_obj_t *s_pa_label;
 static lv_obj_t *s_gauge_voltage_label;
 static lv_obj_t *s_gpio_voltage_label;
+static lv_obj_t *s_sender_mac_label;
 
 static lv_obj_t *make_value_label(lv_obj_t *parent, const char *text, int y)
 {
@@ -44,6 +45,8 @@ static void on_update(lv_timer_t *)
         lv_obj_set_style_text_color(s_status_label,
                                     lv_color_make(0x88, 0x88, 0x88),
                                     LV_PART_MAIN);
+        lv_label_set_text(s_sender_mac_label,
+                          "Source  --:--:--:--:--:--");
         return;
     }
 
@@ -74,7 +77,7 @@ static void on_update(lv_timer_t *)
     }
     lv_label_set_text(s_pressure_label, pressure);
 
-    char value[32];
+    char value[48];
     snprintf(value, sizeof(value), "mbar  %.4g", reading.pressure_mbar);
     lv_label_set_text(s_mbar_label, value);
     snprintf(value, sizeof(value), "Pa      %.4g", reading.pressure_pa);
@@ -83,6 +86,11 @@ static void on_update(lv_timer_t *)
     lv_label_set_text(s_gauge_voltage_label, value);
     snprintf(value, sizeof(value), "Input    %.3f V", reading.gpio_voltage);
     lv_label_set_text(s_gpio_voltage_label, value);
+    snprintf(value, sizeof(value), "Source  %02X:%02X:%02X:%02X:%02X:%02X",
+             reading.sender_mac[0], reading.sender_mac[1],
+             reading.sender_mac[2], reading.sender_mac[3],
+             reading.sender_mac[4], reading.sender_mac[5]);
+    lv_label_set_text(s_sender_mac_label, value);
 }
 
 static void on_gesture(lv_event_t *event)
@@ -150,6 +158,8 @@ void vacuum_screen_create()
     s_pa_label = make_value_label(s_screen, "Pa      --", 300);
     s_gauge_voltage_label = make_value_label(s_screen, "Gauge  -- V", 330);
     s_gpio_voltage_label = make_value_label(s_screen, "Input    -- V", 360);
+    s_sender_mac_label = make_value_label(
+        s_screen, "Source  --:--:--:--:--:--", 390);
 
     lv_obj_t *hint = lv_label_create(s_screen);
     lv_label_set_text(hint, "Readout stays live on the clock after opening");

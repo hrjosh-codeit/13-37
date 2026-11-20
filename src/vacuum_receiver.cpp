@@ -26,7 +26,7 @@ static const char *s_error = nullptr;
 static uint8_t s_channel = 1;
 static uint32_t s_last_channel_scan_ms = 0;
 
-static void on_vacuum_packet(const uint8_t *, const uint8_t *data, int length)
+static void on_vacuum_packet(const uint8_t *mac, const uint8_t *data, int length)
 {
     if (!data || length != (int)sizeof(SenderVacuumPacket)) return;
 
@@ -50,6 +50,7 @@ static void on_vacuum_packet(const uint8_t *, const uint8_t *data, int length)
     s_reading.gauge_voltage = packet.gauge_voltage;
     s_reading.gpio_voltage = packet.gpio_voltage;
     s_reading.received_ms = millis();
+    if (mac) memcpy(s_reading.sender_mac, mac, 6);
     s_reading.valid = true;
     portEXIT_CRITICAL(&s_reading_mux);
 }

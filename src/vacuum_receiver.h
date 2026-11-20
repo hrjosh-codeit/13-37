@@ -8,6 +8,7 @@ struct VacuumReading {
     float gauge_voltage;
     float gpio_voltage;
     uint32_t received_ms;
+    uint8_t sender_mac[6];
     bool valid;
 };
 
